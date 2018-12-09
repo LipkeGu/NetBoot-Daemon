@@ -30,9 +30,6 @@
     <ClInclude Include="Include.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
-    <ClInclude Include="Functions.h">
-      <Filter>Headerdateien</Filter>
-    </ClInclude>
     <ClInclude Include="Netbootd\Network\Protocol\DHCP.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>

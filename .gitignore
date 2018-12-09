@@ -34,3 +34,11 @@
 *.tlog
 *.idb
 *.pdb
+*.db
+*.opendb
+.vs/NetBootd/v15/.suo
+*.ipch
+*.db-shm
+*.db-wal
+*.exp
+*.ilk

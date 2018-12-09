@@ -14,17 +14,17 @@ namespace Netbootd
 
 		EXPORT bool Filesystem::Init()
 		{
-			CreateDir("tftp_root");
+			CreateDir("tftp_root/");
 			CreateDir("tftp_root/Boot/");
 
 			CreateDir("tftp_root/OSChooser/");
 			CreateDir("tftp_root/Setup/");
 
-			CreateDir("tftp_root/Boot/x86");
-			CreateDir("tftp_root/Boot/x86/efi");
+			CreateDir("tftp_root/Boot/x86/");
+			CreateDir("tftp_root/Boot/x86/efi/");
 
-			CreateDir("tftp_root/Boot/x64");
-			CreateDir("tftp_root/Boot/x64/efi");
+			CreateDir("tftp_root/Boot/x64/");
+			CreateDir("tftp_root/Boot/x64/efi/");
 
 			return true;
 		}
@@ -65,11 +65,11 @@ namespace Netbootd
 
 		EXPORT std::string Filesystem::ResolvePath(const std::string& path)
 		{
-			std::string res = "./";
+			std::string res;
 
 			if (path.find_first_of('\\') == 0 || path.find_first_of('/') == 0)
 			{
-				res = "./" + path.substr(1, path.length() - 1);
+				res = GetCurDir() + "/" + path.substr(1, path.length() - 1);
 #ifdef _WIN32
 				res = replace(res, "/", "\\");
 #else
@@ -78,7 +78,7 @@ namespace Netbootd
 			}
 			else
 			{
-				res = GetCurDir() + path;
+				res = GetCurDir() + "/" + path;
 #ifdef _WIN32
 				res = replace(res, "//", "/");
 				res = replace(res, "/", "\\");
