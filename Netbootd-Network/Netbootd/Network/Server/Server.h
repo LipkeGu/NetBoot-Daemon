@@ -25,8 +25,8 @@ namespace Netbootd
 		public:
 			EXPORT Server();
 
-			EXPORT Server(ServerMode serverMode,
-				ServiceType serviceType, std::string ident);
+			EXPORT Server(const ServerMode serverMode,
+				const ServiceType serviceType, const std::string& ident);
 
 			EXPORT ~Server();
 
@@ -35,23 +35,24 @@ namespace Netbootd
 			EXPORT static bool close_winsock();
 #endif
 			EXPORT INLINE bool IsListening() const;
-			EXPORT bool Add(ServerMode serverMode,
-				ServiceType serviceType, std::string ident);
+			EXPORT bool Add(const ServerMode serverMode,
+				const ServiceType serviceType, const std::string& ident);
 
-			EXPORT bool HasEndpoint(std::string ident);
+			EXPORT bool HasEndpoint(const std::string& ident);
 			EXPORT INLINE bool HasEndpoints() const;
 			EXPORT bool Init(long sec = 0, long usec = 2);
 			EXPORT bool Bind();
 			EXPORT bool Close();
 			EXPORT in_addr LocalIP() const;
 			EXPORT void Update();
-			EXPORT void Remove(std::string ident);
-			EXPORT void Listen(void(*ListenCallBack)(ServerMode, ServiceType, Network::client));
+			EXPORT void Remove(const std::string& ident);
+			EXPORT void Listen(void(*ListenCallBack)
+				(const ServerMode, const ServiceType, client));
 
-			EXPORT int Send(client client, const char* buffer, int length);
+			EXPORT int Send(client& client, const char* buffer, int length);
 
 			EXPORT INLINE std::string GetHostName() const;
-			EXPORT INLINE Endpoint GetEndpoint(std::string id);
+			EXPORT INLINE Endpoint GetEndpoint(const std::string& id);
 		private:
 
 			std::map<std::string, Endpoint> endpoints;
@@ -65,11 +66,11 @@ namespace Netbootd
 			fd_set fd_except;
 		};
 
-		EXPORT void __Send(ServerMode serverMode, ServiceType serviceType,
-			_SOCKET __socket, client client, const char* buffer, unsigned int length);
+		EXPORT void __Send(const ServerMode serverMode, const ServiceType serviceType,
+			const _SOCKET __socket, client client, const char* buffer, int length);
 
-		EXPORT void __Listen(ServerMode serverMode, ServiceType serviceType, std::string ident, _SOCKET _socket, int flags,
-			int backlog,
-			void(*ListenCallBack)(ServerMode, ServiceType, client));
+		EXPORT void __Listen(const ServerMode serverMode, const ServiceType serviceType,
+			const std::string ident, const _SOCKET _socket, const int flags,
+			const int backlog, void(*ListenCallBack)(const ServerMode, const ServiceType, client));
 	}
 }

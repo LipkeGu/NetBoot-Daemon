@@ -24,3 +24,4 @@ public:
 	EXPORT INLINE void Close() const;
 	EXPORT ~NetBootd();
 };
+

@@ -4,6 +4,9 @@
 #define INLINE __inline
 #include "../Client/Client.h"
 
+#ifndef NETBOOTD_PROTO_DHCP
+#define NETBOOTD_PROTO_DHCP
+#include "DHCP_Defines.h"
 namespace Netbootd
 {
 	namespace Network
@@ -19,28 +22,29 @@ namespace Netbootd
 			EXPORT DHCP_Packet(client c)
 			{
 				memset(this, 0, sizeof(this));
-				op = 2;
-				hwtype = c.Protocol.dhcp.hwtype;
-				hwlength = c.Protocol.dhcp.hwlength;
-				hops = c.Protocol.dhcp.hops;
-				xid = c.Protocol.dhcp.xid;
-				secs = c.Protocol.dhcp.secs;
-				flags = c.Protocol.dhcp.flags;
+				op = c.Protocol.dhcp.get_opcode();
+				hwtype = c.Protocol.dhcp.get_hwtype();
+				hwlength = c.Protocol.dhcp.get_hwlength();
+				hops = c.Protocol.dhcp.get_hops();
+				xid = c.Protocol.dhcp.get_xid();
+				secs = c.Protocol.dhcp.get_secs();
+				flags = c.Protocol.dhcp.get_flags();
 
-				ciaddr = c.Protocol.dhcp.ciaddr;
-				yiaddr = c.Protocol.dhcp.yiaddr;
-				siaddr = c.Protocol.dhcp.siaddr;
-				giaddr = c.Protocol.dhcp.giaddr;
+				ciaddr = c.Protocol.dhcp.get_clientIP();
+				yiaddr = c.Protocol.dhcp.get_yourIP();
+				siaddr = c.Protocol.dhcp.get_nextIP();
+				giaddr = c.Protocol.dhcp.get_relayIP();
 
 				memset(chaddr, 0, 16);
-				memcpy(&chaddr, c.Protocol.dhcp.chaddr, 16);
+				memcpy(&chaddr, c.Protocol.dhcp.get_hwaddress(), 16);
 
 				memset(sname, 0, 64);
-				memcpy(&sname, c.Protocol.dhcp.sname, strlen(c.Protocol.dhcp.sname));
+				memcpy(&sname, c.Protocol.dhcp.get_servername().c_str(),
+					strlen(c.Protocol.dhcp.get_servername().c_str()));
 
 				memset(file, 0, 128);
-				memcpy(&file, c.Protocol.dhcp.filename.c_str(),
-					strlen(c.Protocol.dhcp.filename.c_str()));
+				memcpy(&file, c.Protocol.dhcp.get_filename().c_str(),
+					strlen(c.Protocol.dhcp.get_filename().c_str()));
 
 				// decimal > 99.130.83.99
 				cookie[0] = static_cast<unsigned char>(0x63);
@@ -50,7 +54,6 @@ namespace Netbootd
 
 				c.Protocol.dhcp.RemoveOption(50);
 				c.Protocol.dhcp.RemoveOption(57);
-				c.Protocol.dhcp.RemoveOption(60);
 				c.Protocol.dhcp.RemoveOption(61);
 				c.Protocol.dhcp.RemoveOption(93);
 				c.Protocol.dhcp.RemoveOption(94);
@@ -102,3 +105,4 @@ namespace Netbootd
 		} DHCP_Packet;
 	}
 }
+#endif

@@ -23,6 +23,7 @@
     <ClInclude Include="Netbootd\Network\Client\Client.h" />
     <ClInclude Include="Netbootd\NetBootd.h" />
     <ClInclude Include="Netbootd\Network\Protocol\DHCP.h" />
+    <ClInclude Include="Netbootd\Network\Protocol\DHCP_Defines.h" />
     <ClInclude Include="Netbootd\Network\Server\Endpoint.h" />
     <ClInclude Include="Netbootd\Network\Server\Server.h" />
   </ItemGroup>

@@ -22,14 +22,16 @@ namespace Netbootd
 		{
 		public:
 			EXPORT Endpoint();;
-			EXPORT Endpoint(ServerMode serverMode, ServiceType serviceType, std::string ident);
+			EXPORT Endpoint(const ServerMode serverMode,
+				const ServiceType serviceType, const std::string& ident);
 
 			EXPORT ~Endpoint();;
 
-			EXPORT int Init(int reuseaddr = 1, int broadcast = 1, int keepalive = 1, int backlog = 5);
+			EXPORT int Init(const int reuseaddr = 1,
+				const int broadcast = 1, const int keepalive = 1, const int backlog = 5);
 			EXPORT int Bind();
 			EXPORT int Close();
-			EXPORT int Close(_SOCKET socket) const;
+			EXPORT int Close(const _SOCKET socket) const;
 			EXPORT void RequestClose();
 			EXPORT bool CloseRequested() const;
 			EXPORT INLINE void Update();
@@ -39,7 +41,7 @@ namespace Netbootd
 			EXPORT int GetLogs() const;
 			EXPORT ServerMode GetMode() const;
 			EXPORT ServiceType GetType() const;
-			EXPORT void SetFlags(int flags);
+			EXPORT void SetFlags(const int flags);
 			EXPORT _SOCKET GetSocket() const;
 
 			EXPORT std::string LocalIP() const;

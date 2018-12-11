@@ -20,20 +20,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 EXPORT Netbootd::Network::Server server;
 EXPORT Netbootd::System::Filesystem fs;
-
 EXPORT void Handle_Request(const ServerMode serverMode,
 	const ServiceType serviceType, Netbootd::Network::client client);
-EXPORT const std::string replace(std::string& str,
-	const std::string& from, const std::string& to);
-
-EXPORT const char* AddressStr(unsigned int ip);
 
 EXPORT NetBootd::NetBootd()
 = default;
 
 EXPORT void NetBootd::Init()
 {
-	printf("Network Boot daemon 0.4 (BETA)\nStarting Storage subsystem...");
+	printf("Network Boot daemon 0.4 (BETA)\nStarting Storage subsystem...\n");
 
 	fs.Init();
 
@@ -74,6 +69,11 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 	int pktsize = 0;
 	ClearBuffer(data, sizeof(16385));
 	Netbootd::Network::DHCP_Packet response;
+	
+	std::vector<DHCP_Option> vendorops;
+
+	auto discovery_enc_opt = DHCP_Option(static_cast<unsigned char>(6),
+		static_cast<unsigned int>(3));
 
 	switch (serverMode)
 	{
@@ -100,38 +100,72 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 					AddressStr(client.Protocol.dhcp.get_relayIP()));
 			}
 
-			client.Protocol.dhcp.set_opcode(2);
+			client.Protocol.dhcp.set_opcode(Netbootd::Network::BOOTREPLY);
 			client.Protocol.dhcp.set_nextIP(server.LocalIP().s_addr);
 
-			client.Protocol.dhcp.set_filename("Boot/x86/wdsnbp.com");
+			
 			client.Protocol.dhcp.set_servername(server.GetHostName());
 
 			// Set the Relayagent adress as response address...
 			if (client.Protocol.dhcp.get_relayIP() != INADDR_ANY)
 				client.toAddr.sin_addr.s_addr = client.Protocol.dhcp.get_relayIP();
 
-			switch (static_cast<unsigned char>(client.Protocol.
-				dhcp.options.at(53).Value[0]))
+			client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
+				<unsigned char>(54), server.LocalIP().s_addr));
+
+			switch (client.Protocol.dhcp.get_vendor())
 			{
-			case 1:
+			case Netbootd::Network::PXEServer:
 				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-					<unsigned char>(53), static_cast<unsigned char>(2)));
+					<unsigned char>(60), 9, "PXEServer"));
 				break;
-			case 3:
-			case 8:
+			case Netbootd::Network::PXEClient:
 				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-					<unsigned char>(53), static_cast<unsigned char>(5)));
+					<unsigned char>(60), 9, "PXEClient"));
+
+				if (client.Protocol.dhcp.IsEtherBootClient())
+					printf("[I] Client reports EtherBoot capabilities!\n");
+
+				client.Protocol.dhcp.set_filename("Boot/x86/wdsnbp.com");
+				break;
+			case Netbootd::Network::APPLEBSDP:
+				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
+					<unsigned char>(60), 9, "APPLEBSDP"));
 				break;
 			default:
 				return;
 			}
 
-			client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-				<unsigned char>(54), server.LocalIP().s_addr));
+			switch (static_cast<Netbootd::Network::DHCPMSGTYPE>(client.Protocol.
+				dhcp.options.at(53).Value[0]))
+			{
+			case Netbootd::Network::DISCOVER:
+				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
+					<unsigned char>(53), static_cast<unsigned char>
+						(Netbootd::Network::OFFER)));
 
-			client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-				<unsigned char>(60), 9, "PXEClient"));
+				switch (client.Protocol.dhcp.get_vendor())
+				{
+				case Netbootd::Network::PXEClient:
+					vendorops.emplace_back(static_cast<unsigned char>(6),
+						static_cast<unsigned char>(3));
+					break;
+				default: ;
+				}
+			break;
+			case Netbootd::Network::REQUEST:
+			case Netbootd::Network::INFORM:
+				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
+					<unsigned char>(53), static_cast<unsigned char>
+						(Netbootd::Network::ACK)));
+				break;
+			default:
+				return;
+			}
 
+			if (!vendorops.empty())
+				client.Protocol.dhcp.AddOption(DHCP_Option(43, vendorops));
+			
 			client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
 				<unsigned char>(255)));
 
@@ -147,6 +181,23 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 		}
 		break;
 	default:;
+	}
+}
+
+EXPORT DHCP_Option GenerateBootMenue(const Netbootd::Network::client& client,
+	std::vector<DHCP_Option> vendorOpts)
+{
+	std::vector<Netbootd::Network::BootMenuEntry> BootMenu;
+	BootMenu.emplace_back("Local Boot");
+	BootMenu.emplace_back("WDS Server (VPN)");
+	BootMenu.emplace_back("Fritzbox");
+
+
+	int offset = 0;
+
+	for (auto & entry : BootMenu)
+	{
+		
 	}
 }
 

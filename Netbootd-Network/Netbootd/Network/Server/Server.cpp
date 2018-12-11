@@ -36,8 +36,8 @@ namespace Netbootd
 		{
 		}
 
-		EXPORT Server::Server(ServerMode serverMode,
-			ServiceType serviceType, std::string ident)
+		EXPORT Server::Server(const ServerMode serverMode,
+			const ServiceType serviceType, const std::string& ident)
 		{
 			Add(serverMode, serviceType, ident);
 		}
@@ -45,8 +45,8 @@ namespace Netbootd
 		EXPORT Server::~Server()
 			= default;
 
-		EXPORT bool Server::Add(ServerMode serverMode,
-			ServiceType serviceType, std::string ident)
+		EXPORT bool Server::Add(const ServerMode serverMode,
+			const ServiceType serviceType, const std::string& ident)
 		{
 			if (this->HasEndpoint(ident))
 				return false;
@@ -57,7 +57,7 @@ namespace Netbootd
 			return this->HasEndpoint(ident);
 		}
 
-		EXPORT void Server::Remove(std::string ident)
+		EXPORT void Server::Remove(const std::string& ident)
 		{
 			if (!this->HasEndpoint(ident))
 				return;
@@ -87,7 +87,7 @@ namespace Netbootd
 			return retval == 0;
 		}
 
-		EXPORT bool Server::Init(long sec, long usec)
+		EXPORT bool Server::Init(const long sec, const long usec)
 		{
 			auto retval = 0;
 			this->timeout.tv_sec = sec;
@@ -135,7 +135,8 @@ namespace Netbootd
 			return **reinterpret_cast<struct in_addr**>(hostentry);
 		}
 
-		EXPORT void Server::Listen(void(*ListenCallBack)(ServerMode, ServiceType, client))
+		EXPORT void Server::Listen(void(*ListenCallBack)
+			(const ServerMode, const ServiceType, client))
 		{
 			while (this->IsListening())
 			{
@@ -196,7 +197,7 @@ namespace Netbootd
 			}
 		}
 
-		EXPORT Endpoint Server::GetEndpoint(std::string id)
+		EXPORT Endpoint Server::GetEndpoint(const std::string& id)
 		{
 			return this->endpoints.at(id);
 		}
@@ -215,7 +216,7 @@ namespace Netbootd
 			return this->hName;
 		}
 
-		EXPORT INLINE bool Server::HasEndpoint(std::string ident)
+		EXPORT INLINE bool Server::HasEndpoint(const std::string& ident)
 		{
 			return this->endpoints.find(ident)
 				!= this->endpoints.end();
@@ -226,7 +227,7 @@ namespace Netbootd
 			return !this->endpoints.empty();
 		}
 
-		EXPORT int Server::Send(client client, const char* buffer, int length)
+		EXPORT int Server::Send(client& client, const char* buffer, int length)
 		{
 			const auto retval = SOCKET_ERROR;
 

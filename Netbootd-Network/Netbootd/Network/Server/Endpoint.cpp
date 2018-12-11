@@ -28,7 +28,7 @@ namespace Netbootd
 		}
 
 		EXPORT Endpoint::Endpoint(const ServerMode serverMode,
-			const ServiceType serviceType, std::string ident)
+			const ServiceType serviceType, const std::string& ident)
 		{
 			this->mode = serverMode;
 			this->ident = ident;
@@ -74,10 +74,12 @@ namespace Netbootd
 			ClearBuffer(&this->local, sizeof(this->local));
 		}
 
-		EXPORT int Endpoint::Init(int reuseaddr, int broadcast, int keepalive, int backlog)
+		EXPORT int Endpoint::Init(const int reuseaddr, const int broadcast,
+			const int keepalive, const int backlog)
 		{
 			auto retval = SOCKET_ERROR;
 			this->_socket = socket(this->af, this->type, this->proto);
+			this->backlog = backlog;
 
 			if (this->_socket == INVALID_SOCKET)
 				return SOCKET_ERROR;
@@ -86,13 +88,13 @@ namespace Netbootd
 			{
 			case UDP:
 				retval = setsockopt(this->_socket, SOL_SOCKET,
-					SO_BROADCAST, (const char*)&broadcast, sizeof(int));
+					SO_BROADCAST, reinterpret_cast<const char*>(&broadcast), sizeof(int));
 
 				if (retval == SOCKET_ERROR)
 					printf("[E] %s: setsockopt (BROADCAST) failed! (%d)\n", __FUNCTION__, WSAGetLastError());
 
 				retval = setsockopt(this->_socket, SOL_SOCKET,
-					SO_REUSEADDR, (const char*)&reuseaddr, sizeof(int));
+					SO_REUSEADDR, reinterpret_cast<const char*>(&reuseaddr), sizeof(int));
 
 				if (retval == SOCKET_ERROR)
 					printf("[E] %s: setsockopt (REUSEADDR) failed! (%d)\n", __FUNCTION__, WSAGetLastError());
@@ -104,7 +106,7 @@ namespace Netbootd
 				break;
 			case TCP:
 				retval = setsockopt(_socket, SOL_SOCKET,
-					SO_KEEPALIVE, (const char*)&keepalive, sizeof(keepalive));
+					SO_KEEPALIVE, reinterpret_cast<const char*>(&keepalive), sizeof keepalive);
 
 				if (retval == SOCKET_ERROR)
 					printf("[E] %s: setsockopt (KEEPALIVE) failed! (%d)\n", __FUNCTION__, WSAGetLastError());
@@ -122,7 +124,7 @@ namespace Netbootd
 
 		EXPORT int Endpoint::Bind()
 		{
-			auto retval = bind(this->_socket,
+			const auto retval = bind(this->_socket,
 				reinterpret_cast<struct sockaddr*>(&this->local),
 				sizeof(this->local));
 
@@ -144,7 +146,7 @@ namespace Netbootd
 			return this->Close(this->_socket);
 		}
 
-		EXPORT int Endpoint::Close(_SOCKET socket) const
+		EXPORT int Endpoint::Close(const _SOCKET socket) const
 		{
 			const int retval = _close(this->_socket);
 
@@ -157,8 +159,9 @@ namespace Netbootd
 			return retval;
 		}
 
-		EXPORT void __Send(ServerMode serverMode, ServiceType serviceType,
-			_SOCKET __socket, client client, const char* buffer, unsigned int length)
+		EXPORT void __Send(const ServerMode serverMode, const ServiceType serviceType,
+			const _SOCKET __socket, client client, const char* buffer,
+			int length)
 		{
 			auto retval = SOCKET_ERROR;
 			unsigned int bs = 0;
@@ -167,13 +170,14 @@ namespace Netbootd
 			case TCP:
 				do
 				{
-					bs += _write(__socket, &buffer[bs], length - static_cast<unsigned int>(bs), 0);
+					bs += _write(__socket, &buffer[bs], length
+						- static_cast<unsigned int>(bs), 0);
 				} while (bs < length);
 				break;
 			case UDP:
 				retval = sendto(__socket, buffer, length, 0,
 					reinterpret_cast<struct sockaddr*>
-						(&client.toAddr), sizeof(client.toAddr));
+						(&client.toAddr), sizeof client.toAddr);
 
 				if (retval == SOCKET_ERROR)
 					printf("[E] %s: Send failed!\n", __FUNCTION__);
@@ -217,16 +221,17 @@ namespace Netbootd
 			this->flags = flags;
 		}
 
-		EXPORT void __Listen(ServerMode serverMode, ServiceType serviceType, std::string ident,
-			_SOCKET _socket, int flags, int backlog, void(*ListenCallBack)(ServerMode, ServiceType, client))
+		EXPORT void __Listen(const ServerMode serverMode, const ServiceType serviceType,
+			const std::string ident, const _SOCKET _socket, const int flags,
+			const int backlog, void(*ListenCallBack)(const ServerMode, const ServiceType, client))
 		{
 			char buffer[16385];
-			ClearBuffer(&buffer, sizeof(buffer));
+			ClearBuffer(&buffer, sizeof buffer);
 
 			sockaddr_in remote{};
-			ClearBuffer(&remote, sizeof(remote));
+			ClearBuffer(&remote, sizeof remote);
 
-			int rlen = sizeof(remote);
+			int rlen = sizeof remote;
 			auto retval = SOCKET_ERROR;
 			_SOCKET s;
 
@@ -241,7 +246,8 @@ namespace Netbootd
 					return;
 				}
 
-				s = _SOCKET(static_cast<_SOCKET>(accept(_socket, reinterpret_cast<struct sockaddr *>(&remote), &rlen)));
+				s = _SOCKET(static_cast<_SOCKET>(accept(_socket,
+					reinterpret_cast<struct sockaddr *>(&remote), &rlen)));
 
 				if (!s)
 				{
@@ -255,7 +261,7 @@ namespace Netbootd
 					return;
 				}
 #ifdef _WIN32
-				retval = _read(s, buffer, sizeof(buffer), flags);
+				retval = _read(s, buffer, sizeof buffer, flags);
 #else
 				retval = _read(s, buffer, sizeof(buffer));
 #endif
@@ -279,10 +285,8 @@ namespace Netbootd
 			}
 
 			printf("[I] %s: Got request from: %s\n", ident.c_str(), inet_ntoa(remote.sin_addr));
-
 			if (ListenCallBack != nullptr)
-				ListenCallBack(serverMode, serviceType,
-					client(serviceType, ident, remote, buffer, retval));
+				ListenCallBack(serverMode, serviceType, client(serviceType, ident, remote, buffer, retval));
 		}
 
 		EXPORT int Endpoint::GetLogs() const

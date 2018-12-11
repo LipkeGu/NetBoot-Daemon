@@ -13,7 +13,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 #include "../../../Include.h"
+#include "../Protocol/DHCP_Defines.h"
 
+#ifndef NETBOOTD_CLIENT
+#define NETBOOTD_CLIENT
 namespace Netbootd
 {
 	namespace Network
@@ -23,36 +26,20 @@ namespace Netbootd
 		public:
 			EXPORT client();;
 
-			EXPORT client(ServiceType serviceType, std::string ident,
-				sockaddr_in remote, const char* buffer, int length);
-			EXPORT ~client();;
+			EXPORT client(const ServiceType serviceType, const std::string& ident,
+				const sockaddr_in remote, const char* buffer, const int length);
+			EXPORT ~client();
+			EXPORT bool Init(const char* buffer, const int length);
 
 			std::string ident;
 			sockaddr_in toAddr;
+			ServiceType serviceType;
 
 			struct
 			{
 				struct
 				{
-					unsigned char opcode;
 					std::map<unsigned char, DHCP_Option> options;
-
-					unsigned char hwtype;
-					unsigned char hwlength;
-					unsigned char hops;
-					unsigned int xid;
-					unsigned short secs;
-					unsigned short flags;
-
-					unsigned int ciaddr;
-					unsigned int yiaddr;
-					unsigned int siaddr;
-					unsigned int giaddr;
-
-					char chaddr[16];
-					char sname[64];
-					std::string filename;
-
 					EXPORT void AddOption(const DHCP_Option option)
 					{
 						RemoveOption(option.Option);
@@ -72,24 +59,24 @@ namespace Netbootd
 						return options.find(option) != options.end();
 					}
 
-					EXPORT void set_opcode(const unsigned char op)
+					EXPORT void set_opcode(const DHCPOPCODE op)
 					{
 						this->opcode = op;
 					}
 
-					EXPORT unsigned char get_opcode() const
+					EXPORT DHCPOPCODE get_opcode() const
 					{
 						return this->opcode;
 					}
 
-					EXPORT void set_hwtype(const unsigned char hwtype)
+					EXPORT void set_hwtype(const DHCPHARDWARETYPE hwtype)
 					{
-						this->hwtype = hwtype;
+						this->hwtype = static_cast<unsigned char>(hwtype);
 					}
 
-					EXPORT unsigned char get_hwtype() const
+					EXPORT DHCPHARDWARETYPE get_hwtype() const
 					{
-						return this->hwtype;
+						return static_cast<DHCPHARDWARETYPE>(this->hwtype);
 					}
 
 					EXPORT void set_hwlength(const unsigned char length)
@@ -132,14 +119,14 @@ namespace Netbootd
 						return this->secs;
 					}
 
-					EXPORT void set_flags(const unsigned short flags)
+					EXPORT void set_flags(const DHCPFLAGS flags)
 					{
-						this->secs = flags;
+						this->secs = static_cast<unsigned short>(flags);
 					}
 
-					EXPORT unsigned short get_flags() const
+					EXPORT DHCPFLAGS get_flags() const
 					{
-						return this->flags;
+						return static_cast<DHCPFLAGS>(this->flags);
 					}
 
 					EXPORT void set_clientIP(const unsigned int ip)
@@ -165,6 +152,9 @@ namespace Netbootd
 					EXPORT void set_nextIP(const unsigned int ip)
 					{
 						this->siaddr = ip;
+						auto x = AddressStr(this->siaddr);
+
+						AddOption(DHCP_Option(66, strlen(x), x));
 					}
 
 					EXPORT unsigned int get_nextIP() const
@@ -193,6 +183,16 @@ namespace Netbootd
 						return this->chaddr;
 					}
 
+					EXPORT void set_vendor(const DHCPPXEVENDOR vendor)
+					{
+						this->vendor = vendor;
+					}
+
+					EXPORT DHCPPXEVENDOR get_vendor() const
+					{
+						return this->vendor;
+					}
+
 					EXPORT void set_servername(const std::string& sname)
 					{
 						memset(&this->sname, 0, 64);
@@ -204,22 +204,94 @@ namespace Netbootd
 						return std::string(this->sname);
 					}
 
+					EXPORT bool IsEtherBootClient() const
+					{
+						return this->isEtherBootClient;
+					}
+
 					EXPORT void set_filename(const std::string& file)
 					{
 						this->filename = file;
+						AddOption(DHCP_Option(67, this->filename.size(),
+							this->filename.c_str()));
 					}
 
 					EXPORT std::string get_filename() const
 					{
 						return this->filename;
 					}
+
+					DHCPOPCODE opcode;
+					unsigned char hwtype;
+					unsigned char hwlength;
+					unsigned char hops;
+					unsigned int xid;
+					unsigned short secs;
+					unsigned short flags;
+
+					unsigned int ciaddr;
+					unsigned int yiaddr;
+					unsigned int siaddr;
+					unsigned int giaddr;
+
+					char chaddr[16];
+					char sname[64];
+					std::string filename;
+					DHCPPXEVENDOR vendor;
+
+					bool isEtherBootClient = false;
+
+					struct
+					{
+						BootServerType type;
+						EXPORT BootServerType get_bootserverType() const
+						{
+							return this->type;
+						}
+
+						EXPORT void set_bootserverType(const BootServerType type)
+						{
+							this->type = type;;
+						}
+					} rbcp;
+
+					struct
+					{
+
+					} bsdp;
 				} dhcp;
 
 				struct
 				{
 					std::string filename;
+					unsigned int bytesRead;
+					unsigned int bytesToRead;
+
+					unsigned short block;
+					unsigned short blocksize;
+					unsigned short windowsSize;
+					unsigned short lastAckedBlock;
+
+					EXPORT unsigned int get_bytesRead() const;
+					EXPORT void set_bytesRead(const unsigned int bytes);
+
+					EXPORT unsigned int get_bytesToRead() const;
+					EXPORT void set_bytesToRead(const unsigned int bytes);
+
+					EXPORT bool TFTP_HasOption(const char* option, const char* buffer, int length)
+					{
+						uint32_t i = 0;
+
+						for (auto i = 2; i < length; i++)
+							if (memcmp(option, &buffer[i], strlen(option)) == 0)
+								return true;
+
+						return false;
+					}
+
 				} tftp;
 			} Protocol;
 		};
 	}
 }
+#endif

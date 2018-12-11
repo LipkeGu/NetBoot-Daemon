@@ -4,12 +4,68 @@ namespace Netbootd
 {
 	namespace System
 	{
-		EXPORT Filesystem::Filesystem()	= default;
-
-
-		EXPORT Filesystem::Filesystem(const std::string& curDir)
+		EXPORT Filesystem::Filesystem(std::string filename, FileOpenMode mode)
 		{
 			this->workingDir = GetCurDir();
+			this->mode = mode;
+			this->filesize = 0;
+			this->filename = this->ResolvePath(filename);
+			this->isOpen = this->Open();
+			this->ctype = nullptr;
+
+			if (this->isOpen)
+			{
+				if (this->filename.find(".txt") != std::string::npos)
+					this->ctype = "text/plain";
+
+				if (this->filename.find(".bcd") != std::string::npos)
+					this->ctype = "application/octet-stream";
+
+				if (this->filename.find(".wim") != std::string::npos)
+					this->ctype = "application/octet-stream";
+
+				if (this->filename.find(".sdi") != std::string::npos)
+					this->ctype = "application/octet-stream";
+			}
+			else
+				this->ctype = "";
+		}
+
+		EXPORT bool Filesystem::Open()
+		{
+			switch (this->mode)
+			{
+			case FileWrite:
+				this->file = fopen(this->filename.c_str(), "w");
+				break;
+			case FileRead:
+				this->file = fopen(this->filename.c_str(), "r");
+				break;
+			case FileReadBinary:
+				this->file = fopen(this->filename.c_str(), "rb");
+				break;
+			case FileWriteBinary:
+				this->file = fopen(this->filename.c_str(), "wb");
+				break;
+			default:
+				this->file = nullptr;
+				break;
+			}
+
+			if (this->file != nullptr)
+			{
+				if (fseek(this->file, 0, SEEK_END) == 0)
+				{
+					this->filesize = ftell(this->file);
+					rewind(this->file);
+
+					return true;
+				}
+				else
+					return false;
+			}
+			else
+				return false;
 		}
 
 		EXPORT bool Filesystem::Init()
@@ -32,12 +88,50 @@ namespace Netbootd
 		EXPORT Filesystem::~Filesystem()
 		= default;
 
-		EXPORT void Filesystem::Write(const std::string& path, const char * buffer, const int offset, const int count)
+		EXPORT unsigned int Filesystem::Write(const char* data,
+			unsigned int length, unsigned int byteswritten, long seek)
 		{
+			unsigned int res = 0;
+
+			if (!this->isOpen || this->mode == FileRead || this->mode == FileReadBinary)
+				return res;
+
+			if (length > 0)
+			{
+				if (fseek(this->file, seek, SEEK_END) == 0)
+				{
+					byteswritten += fwrite(data, 1, length, this->file);
+					res = byteswritten;
+				}
+			}
+
+			return res;
 		}
+
 		
-		EXPORT void Filesystem::Read(const std::string& path, char * buffer, const int offset, const int count)
+		EXPORT unsigned int Filesystem::Read(char* dest, unsigned int dest_offset, long seek, unsigned int length) const
 		{
+			unsigned int res = 0;
+
+			if (!this->isOpen || this->mode == FileWrite || this->mode == FileWriteBinary)
+				return res;
+
+			if (fseek(this->file, seek, SEEK_SET) == 0)
+				res = fread(&dest[dest_offset], 1, length, this->file);
+
+			return res;
+		}
+
+		EXPORT int Filesystem::Close()
+		{
+			int retval = -1;
+			if (!this->isOpen)
+				return retval;
+
+			retval = fclose(this->file);
+			this->filesize = 0;
+		
+			return retval;
 		}
 
 		EXPORT bool Filesystem::CreateDir(const std::string& path)
@@ -61,6 +155,26 @@ namespace Netbootd
 			}
 
 			return str;
+		}
+
+		EXPORT bool Filesystem::Exist()
+		{
+			return this->isOpen;
+		}
+
+		EXPORT std::string Filesystem::CType()
+		{
+			return this->ctype;
+		}
+
+		EXPORT long Filesystem::Length()
+		{
+			return this->filesize;
+		}
+
+		EXPORT std::string Filesystem::Name()
+		{
+			return this->filename;
 		}
 
 		EXPORT std::string Filesystem::ResolvePath(const std::string& path)
@@ -96,7 +210,6 @@ namespace Netbootd
 			char cCurrentPath[260];
 			ClearBuffer(cCurrentPath,260);
 #ifdef _WIN32
-
 			_getcwd(cCurrentPath, 260);
 #else
 			getcwd(cCurrentPath, 260);

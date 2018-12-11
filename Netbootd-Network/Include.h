@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 #include <direct.h>
+#include <vector>
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
 #define INLINE __inline
@@ -57,7 +58,8 @@ typedef EXPORT struct DHCP_Option
 	{
 		memset(this, 0, sizeof(this));
 	};
-
+	
+	
 	EXPORT DHCP_Option(const unsigned char opt, const unsigned char length, const void* value)
 	{
 		Option = opt;
@@ -108,10 +110,39 @@ typedef EXPORT struct DHCP_Option
 			memcpy(&Value, &value, Length);
 	}
 
+	EXPORT DHCP_Option(const unsigned char opt, const std::vector<DHCP_Option> value)
+	{
+		Option = opt;
+		Length = 0;
+		
+		auto offset = 0;
+
+		// Get the entire options length!
+		for (const auto & option : value)
+			Length += option.Length + 2;
+
+		memset(&Value, 0, Length);
+		
+		for (const auto & option : value)
+		{
+			memcpy(&Value[offset], &option.Option, 1);
+			offset += 1;
+			
+			memcpy(&Value[offset], &option.Length, 1);
+			offset += 1;
+
+			memcpy(&Value[offset], &option.Value, option.Length);
+			offset += option.Length;
+		}
+
+		Length = offset;
+	}
+
 	EXPORT DHCP_Option(const unsigned char opt)
 	{
 		Option = opt;
 		Length = 0;
+		memset(&Value, 0, 1024);
 	}
 
 	unsigned char Option;
@@ -119,3 +150,8 @@ typedef EXPORT struct DHCP_Option
 
 	char Value[1024];
 } DHCP_Option;
+
+EXPORT const std::string replace(std::string& str,
+	const std::string& from, const std::string& to);
+
+EXPORT const char* AddressStr(const unsigned int ip);

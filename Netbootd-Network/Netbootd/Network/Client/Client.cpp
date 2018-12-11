@@ -18,44 +18,32 @@ namespace Netbootd
 {
 	namespace Network
 	{
-		EXPORT client::client()
-		{
-		}
-
 		EXPORT client::~client()
 		{
 		}
 
-		EXPORT client::client(ServiceType serviceType, const std::string ident,
-			const sockaddr_in remote, const char* buffer, const int length)
+		EXPORT bool client::Init(const char* buffer, const int length)
 		{
-			ClearBuffer(&toAddr, sizeof(toAddr));
-			toAddr.sin_addr.s_addr = (remote.sin_addr.s_addr == 0)
-			? INADDR_BROADCAST : remote.sin_addr.s_addr;
-
-			this->ident = ident;
-			switch (serviceType)
+			switch (this->serviceType)
 			{
 			case DHCP:
 			case BOOTP:
-				toAddr.sin_family = remote.sin_family;
-				toAddr.sin_port = remote.sin_port;
-				Protocol.dhcp.opcode = 2;
-				Protocol.dhcp.hwtype = buffer[1];
-				Protocol.dhcp.hwlength = buffer[2];
-				Protocol.dhcp.hops = buffer[3];
+				this->Protocol.dhcp.opcode = BOOTREPLY;
+				this->Protocol.dhcp.hwtype = buffer[1];
+				this->Protocol.dhcp.hwlength = buffer[2];
+				this->Protocol.dhcp.hops = buffer[3];
 
-				memcpy(&Protocol.dhcp.xid, &buffer[4], 4);
-				memcpy(&Protocol.dhcp.secs, &buffer[8], 2);
-				memcpy(&Protocol.dhcp.flags, &buffer[10], 2);
-				memcpy(&Protocol.dhcp.ciaddr, &buffer[12], 4);
-				memcpy(&Protocol.dhcp.yiaddr, &buffer[16], 4);
-				memcpy(&Protocol.dhcp.siaddr, &buffer[20], 4);
-				memcpy(&Protocol.dhcp.giaddr, &buffer[24], 4);
-				memcpy(&Protocol.dhcp.chaddr, &buffer[28], 16);
+				memcpy(&this->Protocol.dhcp.xid, &buffer[4], 4);
+				memcpy(&this->Protocol.dhcp.secs, &buffer[8], 2);
+				memcpy(&this->Protocol.dhcp.flags, &buffer[10], 2);
+				memcpy(&this->Protocol.dhcp.ciaddr, &buffer[12], 4);
+				memcpy(&this->Protocol.dhcp.yiaddr, &buffer[16], 4);
+				memcpy(&this->Protocol.dhcp.siaddr, &buffer[20], 4);
+				memcpy(&this->Protocol.dhcp.giaddr, &buffer[24], 4);
+				memcpy(&this->Protocol.dhcp.chaddr, &buffer[28], 16);
 
-				ClearBuffer(&Protocol.dhcp.sname, sizeof(Protocol.dhcp.sname));
-				gethostname(Protocol.dhcp.sname, sizeof(Protocol.dhcp.sname));
+				ClearBuffer(&this->Protocol.dhcp.sname, sizeof(this->Protocol.dhcp.sname));
+				gethostname(this->Protocol.dhcp.sname, sizeof(this->Protocol.dhcp.sname));
 
 				for (auto i = 240; i < length; i++)
 				{
@@ -64,17 +52,71 @@ namespace Netbootd
 						break;
 
 					if (static_cast<unsigned char>(buffer[i + 1]) == static_cast<unsigned char>(1))
-						Protocol.dhcp.AddOption(DHCP_Option(static_cast<unsigned char>(buffer[i]),
+						this->Protocol.dhcp.AddOption(DHCP_Option(static_cast<unsigned char>(buffer[i]),
 							static_cast<unsigned char>(buffer[i + 2])));
 					else
-						Protocol.dhcp.AddOption(DHCP_Option(static_cast<unsigned char>(buffer[i]),
+						this->Protocol.dhcp.AddOption(DHCP_Option(static_cast<unsigned char>(buffer[i]),
 							static_cast<unsigned char>(buffer[i + 1]), &buffer[i + 2]));
 
 					i += 1 + buffer[i + 1];
 				}
+
+				if (Protocol.dhcp.HasOption(60))
+				{
+					char vendor[9];
+					ClearBuffer(vendor, 9);
+					memcpy(&vendor, this->Protocol.dhcp.options.at(60).Value, 9);
+
+					if (memcmp(vendor, "PXEClient", 9) == 0)
+						this->Protocol.dhcp.set_vendor(PXEClient);
+
+					if (memcmp(vendor, "PXEServer", 9) == 0)
+						this->Protocol.dhcp.set_vendor(PXEServer);
+
+					if (memcmp(vendor, "APPLEBSDP", 9) == 0)
+						this->Protocol.dhcp.set_vendor(APPLEBSDP);
+				}
+				else
+					this->Protocol.dhcp.set_vendor(UNKNOWNNO);
+
+				if (this->Protocol.dhcp.HasOption(77))
+				{
+					char value[4];
+					ClearBuffer(value, 4);
+					memcpy(&value, this->Protocol.dhcp.options.at(77).Value, 4);
+
+					if (memcmp(value, "iPXE", 4) == 0)
+					{
+						if (this->Protocol.dhcp.HasOption(175))
+							this->Protocol.dhcp.isEtherBootClient = true;
+
+						/* TEST */
+						if (Protocol.dhcp.get_flags() == Unicast)
+							Protocol.dhcp.set_flags(Broadcast);
+					}
+					else
+						this->Protocol.dhcp.isEtherBootClient = false;
+				}
 				break;
 			default:;
 			}
+
+			return true;
+		}
+
+		EXPORT client::client(const ServiceType serviceType, const std::string& ident,
+			const sockaddr_in remote, const char* buffer, const int length)
+		{
+			ClearBuffer(&this->toAddr, sizeof(this->toAddr));
+			this->toAddr = remote;
+
+			this->serviceType = serviceType;
+			this->ident = ident;
+
+			this->toAddr.sin_addr.s_addr = (remote.sin_addr.s_addr == 0)
+				? INADDR_BROADCAST : remote.sin_addr.s_addr;
+
+			this->Init(buffer, length);
 		}
 	}
 }
