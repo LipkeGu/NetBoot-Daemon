@@ -22,6 +22,8 @@ EXPORT Netbootd::Network::Server server;
 EXPORT Netbootd::System::Filesystem fs;
 EXPORT void Handle_Request(const ServerMode serverMode,
 	const ServiceType serviceType, Netbootd::Network::client client);
+EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
+	std::vector<DHCP_Option>* vendorOpts);
 
 EXPORT NetBootd::NetBootd()
 = default;
@@ -69,7 +71,7 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 	int pktsize = 0;
 	ClearBuffer(data, sizeof(16385));
 	Netbootd::Network::DHCP_Packet response;
-	
+
 	std::vector<DHCP_Option> vendorops;
 
 	auto discovery_enc_opt = DHCP_Option(static_cast<unsigned char>(6),
@@ -103,7 +105,7 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 			client.Protocol.dhcp.set_opcode(Netbootd::Network::BOOTREPLY);
 			client.Protocol.dhcp.set_nextIP(server.LocalIP().s_addr);
 
-			
+
 			client.Protocol.dhcp.set_servername(server.GetHostName());
 
 			// Set the Relayagent adress as response address...
@@ -142,22 +144,24 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 			case Netbootd::Network::DISCOVER:
 				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
 					<unsigned char>(53), static_cast<unsigned char>
-						(Netbootd::Network::OFFER)));
+					(Netbootd::Network::OFFER)));
 
 				switch (client.Protocol.dhcp.get_vendor())
 				{
 				case Netbootd::Network::PXEClient:
 					vendorops.emplace_back(static_cast<unsigned char>(6),
-						static_cast<unsigned char>(3));
+						static_cast<unsigned char>(6));
+
+					GenerateBootMenue(&client, &vendorops);
 					break;
-				default: ;
+				default:;
 				}
-			break;
+				break;
 			case Netbootd::Network::REQUEST:
 			case Netbootd::Network::INFORM:
 				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
 					<unsigned char>(53), static_cast<unsigned char>
-						(Netbootd::Network::ACK)));
+					(Netbootd::Network::ACK)));
 				break;
 			default:
 				return;
@@ -165,7 +169,7 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 
 			if (!vendorops.empty())
 				client.Protocol.dhcp.AddOption(DHCP_Option(43, vendorops));
-			
+
 			client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
 				<unsigned char>(255)));
 
@@ -184,21 +188,76 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 	}
 }
 
-EXPORT DHCP_Option GenerateBootMenue(const Netbootd::Network::client& client,
-	std::vector<DHCP_Option> vendorOpts)
+EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
+	std::vector<DHCP_Option>* vendorOpts)
 {
 	std::vector<Netbootd::Network::BootMenuEntry> BootMenu;
-	BootMenu.emplace_back("Local Boot");
-	BootMenu.emplace_back("WDS Server (VPN)");
-	BootMenu.emplace_back("Fritzbox");
+	std::vector<Netbootd::Network::BootServerEntry> bootserver;
 
-
+	BootMenu.emplace_back(BootMenu.size(), "Local Boot");
+	BootMenu.emplace_back(BootMenu.size(), "WDS Server (VPN)");
+	
 	int offset = 0;
+	unsigned short id = 0;
+	char menubuffer[1024];
+	char serverbuffer[1024];
+
+	ClearBuffer(menubuffer, 1024);
+	ClearBuffer(menubuffer, 1024);
 
 	for (auto & entry : BootMenu)
 	{
-		
+		unsigned short x = BS16(id);
+		memcpy(&menubuffer[offset], &x, 2);
+		offset += 2;
+
+		/* desc len */
+		auto length = static_cast<unsigned char>(strlen(entry.Description.c_str()));
+		memcpy(&menubuffer[offset], &length, 1);
+		offset += 1;
+
+		/* desc*/
+		memcpy(&menubuffer[offset], entry.Description.c_str(), length);
+		offset += length;
+
+		bootserver.emplace_back(x, server.LocalIP().s_addr);
+
+		id = id++;
 	}
+
+	vendorOpts->emplace_back(9, offset, menubuffer);
+
+	offset = 0;
+
+	for (auto & entry : bootserver)
+	{
+		memcpy(&serverbuffer[offset], &entry.ident, 2);
+		offset += 2;
+
+		memcpy(&serverbuffer[offset], &entry.Type, 1);
+		offset += 1;
+
+		memcpy(&serverbuffer[offset], &entry.Addresses, 4);
+		offset += 4;
+	}
+
+	vendorOpts->emplace_back(8, offset, serverbuffer);
+
+	/* Menue prompt */
+	char promptbuffer[512];
+	ClearBuffer(menubuffer, 512);
+	offset = 0;
+
+	unsigned char timeout = 0xff;
+
+	memcpy(&promptbuffer[offset], &timeout, 1);
+	offset += 1;
+	std::string prompt = "Select a Server...";
+
+	memcpy(&promptbuffer[offset], prompt.c_str(), prompt.size());
+	offset += prompt.size();
+
+	vendorOpts->emplace_back(10, offset, promptbuffer);
 }
 
 EXPORT void NetBootd::Listen() const

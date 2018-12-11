@@ -7,26 +7,43 @@ namespace Netbootd
 	{
 		EXPORT typedef enum BootServerType
 		{
-			PXEBootstrapServer = 0,
-			WindowsNTBootServer = 1,
-			IntelLCMBootServer = 2,
-		} BootServerTyp;
+			PXEBootstrapServer = 0x00,
+			WindowsNTBootServer = 0x01,
+			IntelLCMBootServer = 0x02,
+		} BootServerType;
 
 		EXPORT typedef struct BootServerEntry
 		{
-			BootServerType Type;
-			std::vector<unsigned int> Addresses;
+			unsigned int Addresses;
+			unsigned short ident;
+			unsigned char Type;
+
+			BootServerEntry() {}
+			BootServerEntry(const unsigned short id, unsigned int adresses)
+			{
+				ident = id;
+				Addresses = adresses;
+				Type = 1;
+			}
+
+			~BootServerEntry()
+			{
+			}
+
 		} BootServerEntry;
 
 		EXPORT typedef struct BootMenuEntry
 		{
 			BootServerType Type = PXEBootstrapServer;
 			std::string Description;
-
-			BootMenuEntry(const std::string& text, const BootServerType type = PXEBootstrapServer)
-			{
+			unsigned short Ident;
+			unsigned char DescLength = 0;
+			BootMenuEntry(const unsigned short id, const std::string& text, const BootServerType type = PXEBootstrapServer)
+			{;
+				Ident = id;
 				Type = type;
 				Description = text;
+				DescLength = Description.size();
 			}
 
 			~BootMenuEntry()

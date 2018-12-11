@@ -154,7 +154,7 @@ namespace Netbootd
 						this->siaddr = ip;
 						auto x = AddressStr(this->siaddr);
 
-						AddOption(DHCP_Option(66, strlen(x), x));
+						AddOption(DHCP_Option(66, static_cast<int>(strlen(x)), x));
 					}
 
 					EXPORT unsigned int get_nextIP() const
@@ -212,7 +212,7 @@ namespace Netbootd
 					EXPORT void set_filename(const std::string& file)
 					{
 						this->filename = file;
-						AddOption(DHCP_Option(67, this->filename.size(),
+						AddOption(DHCP_Option(67, static_cast<int>(this->filename.size()),
 							this->filename.c_str()));
 					}
 
@@ -244,6 +244,8 @@ namespace Netbootd
 					struct
 					{
 						BootServerType type;
+						bool allowBootMenue;
+
 						EXPORT BootServerType get_bootserverType() const
 						{
 							return this->type;
@@ -252,6 +254,16 @@ namespace Netbootd
 						EXPORT void set_bootserverType(const BootServerType type)
 						{
 							this->type = type;;
+						}
+
+						EXPORT bool get_AllowBootMenue() const
+						{
+							return this->allowBootMenue;
+						}
+
+						EXPORT void set_AllowBootMenue(const bool state)
+						{
+							this->allowBootMenue = state;
 						}
 					} rbcp;
 
