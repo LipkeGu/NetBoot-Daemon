@@ -89,10 +89,6 @@ namespace Netbootd
 					{
 						if (this->Protocol.dhcp.HasOption(175))
 							this->Protocol.dhcp.isEtherBootClient = true;
-
-						/* TEST */
-						if (Protocol.dhcp.get_flags() == Unicast)
-							Protocol.dhcp.set_flags(Broadcast);
 					}
 					else
 						this->Protocol.dhcp.isEtherBootClient = false;
