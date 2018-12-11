@@ -71,11 +71,12 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 	int pktsize = 0;
 	ClearBuffer(data, sizeof(16385));
 	Netbootd::Network::DHCP_Packet response;
+	char item[4];
+	auto bootitem = client.Protocol.dhcp.rbcp.get_item();
+	auto layer = client.Protocol.dhcp.rbcp.get_layer();
+	ClearBuffer(item, 4);
 
 	std::vector<DHCP_Option> vendorops;
-
-	auto discovery_enc_opt = DHCP_Option(static_cast<unsigned char>(6),
-		static_cast<unsigned int>(3));
 
 	switch (serverMode)
 	{
@@ -104,8 +105,6 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 
 			client.Protocol.dhcp.set_opcode(Netbootd::Network::BOOTREPLY);
 			client.Protocol.dhcp.set_nextIP(server.LocalIP().s_addr);
-
-
 			client.Protocol.dhcp.set_servername(server.GetHostName());
 
 			// Set the Relayagent adress as response address...
@@ -138,8 +137,8 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 				return;
 			}
 
-			switch (static_cast<Netbootd::Network::DHCPMSGTYPE>(client.Protocol.
-				dhcp.options.at(53).Value[0]))
+			switch (static_cast<Netbootd::Network::DHCPMSGTYPE>(
+				client.Protocol.dhcp.options.at(53).Value[0]))
 			{
 			case Netbootd::Network::DISCOVER:
 				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
@@ -162,6 +161,18 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
 					<unsigned char>(53), static_cast<unsigned char>
 					(Netbootd::Network::ACK)));
+
+				switch (client.Protocol.dhcp.get_vendor())
+				{
+				case  Netbootd::Network::PXEClient:
+				case  Netbootd::Network::PXEServer:
+					memcpy(&item[0], &bootitem, 2);
+					memcpy(&item[2], &layer, 2);
+						vendorops.emplace_back(DHCP_Option(71, 4, item));
+					break;
+				default:;
+				}
+				
 				break;
 			default:
 				return;
@@ -216,7 +227,7 @@ EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
 		memcpy(&menubuffer[offset], &length, 1);
 		offset += 1;
 
-		/* desc*/
+		/* desc */
 		memcpy(&menubuffer[offset], entry.Description.c_str(), length);
 		offset += length;
 

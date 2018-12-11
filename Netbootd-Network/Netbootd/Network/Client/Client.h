@@ -243,17 +243,30 @@ namespace Netbootd
 
 					struct
 					{
-						BootServerType type;
+						unsigned short type;
+						unsigned short layer;
+
 						bool allowBootMenue;
 
-						EXPORT BootServerType get_bootserverType() const
+
+						EXPORT unsigned short get_layer() const
 						{
-							return this->type;
+							return BS16(this->layer);
 						}
 
-						EXPORT void set_bootserverType(const BootServerType type)
+						EXPORT void set_layer(const unsigned short type)
 						{
-							this->type = type;;
+							this->layer = BS16(type);
+						}
+
+						EXPORT unsigned short get_item()
+						{
+							return BS16(this->type);
+						}
+
+						EXPORT void set_item(const unsigned short type)
+						{
+							this->type = BS16(type);
 						}
 
 						EXPORT bool get_AllowBootMenue() const

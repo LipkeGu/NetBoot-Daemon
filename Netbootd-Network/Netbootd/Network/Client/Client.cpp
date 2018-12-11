@@ -93,6 +93,47 @@ namespace Netbootd
 					else
 						this->Protocol.dhcp.isEtherBootClient = false;
 				}
+
+				if (Protocol.dhcp.HasOption(43))
+				{
+					char vendorbuffer[512];
+					ClearBuffer(vendorbuffer, 512);
+
+					memcpy(vendorbuffer, Protocol.dhcp.options.at(43).Value,
+						Protocol.dhcp.options.at(43).Length);
+
+					std::vector<DHCP_Option> option;
+
+					for (auto i = 0; i < length; i++)
+					{
+						if (static_cast<unsigned char>(vendorbuffer[i]) == static_cast<unsigned char>(0xff) ||
+							static_cast<unsigned char>(vendorbuffer[i]) == 0x00)
+							break;
+
+						option.emplace_back(static_cast<unsigned char>(vendorbuffer[i]),
+							static_cast<unsigned char>(vendorbuffer[i + 1]), &vendorbuffer[i + 2]);
+	
+						i += 1 + vendorbuffer[i + 1];
+					}
+
+					for (auto & opt : option)
+					{
+						if (opt.Option == static_cast<unsigned char>(71))
+						{
+							unsigned short layer = 0;
+							unsigned short type = 0;
+
+							memcpy(&type, &opt.Value[0], 2);
+							Protocol.dhcp.rbcp.set_item(type);
+
+							memcpy(&layer, &opt.Value[2], 2);
+							Protocol.dhcp.rbcp.set_layer(layer);
+						}
+					}
+
+					printf("Got vendor informations.\n");
+				}
+
 				break;
 			default:;
 			}
@@ -114,5 +155,7 @@ namespace Netbootd
 
 			this->Init(buffer, length);
 		}
+
+
 	}
 }
