@@ -155,3 +155,32 @@ EXPORT const std::string replace(std::string& str,
 	const std::string& from, const std::string& to);
 
 EXPORT const char* AddressStr(const unsigned int ip);
+
+#ifndef __LITTLE_ENDIAN
+#define __LITTLE_ENDIAN						1234
+#endif
+
+#ifndef __BIG_ENDIAN
+#define __BIG_ENDIAN						4321
+#endif
+
+#ifndef __BYTE_ORDER
+#if defined(_BIG_ENDIAN)
+#define __BYTE_ORDER __BIG_ENDIAN
+#elif defined(_LITTLE_ENDIAN)
+#define __BYTE_ORDER __LITTLE_ENDIAN
+#endif
+#endif
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define BS32(x) x
+#define BS16(x) x
+#elif __BYTE_ORDER == __BIG_ENDIAN
+#define BS16(x) (((uint16_t)(x) >> 8) | (((uint16_t)(x) & 0xff) << 8))
+#define BS32(x) (((uint32_t)(x) >> 24) | (((uint32_t)(x) >> 8) & 0xff00) | \
+				(((uint32_t)(x) << 8) & 0xff0000) | ((uint32_t)(x) << 24))
+#else
+#define BS16(x) (((uint16_t)(x) >> 8) | (((uint16_t)(x) & 0xff) << 8))
+#define BS32(x) (((uint32_t)(x) >> 24) | (((uint32_t)(x) >> 8) & 0xff00) | \
+				(((uint32_t)(x) << 8) & 0xff0000) | ((uint32_t)(x) << 24))
+#endif
