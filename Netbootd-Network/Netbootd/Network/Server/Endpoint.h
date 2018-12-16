@@ -22,19 +22,20 @@ namespace Netbootd
 		{
 		public:
 			EXPORT Endpoint();;
-			EXPORT Endpoint(const ServerMode serverMode,
+			EXPORT Endpoint(unsigned int addr, const ServerMode serverMode,
 				const ServiceType serviceType, const std::string& ident);
 
-			EXPORT ~Endpoint();;
+			EXPORT ~Endpoint();
 
-			EXPORT int Init(const int reuseaddr = 1,
+			EXPORT int Init(const int multicast = 0, const int reuseaddr = 1,
 				const int broadcast = 1, const int keepalive = 1, const int backlog = 5);
 			EXPORT int Bind();
 			EXPORT int Close();
-			EXPORT int Close(const _SOCKET socket) const;
+			EXPORT int Close(const _SOCKET socket);
 			EXPORT void RequestClose();
 			EXPORT bool CloseRequested() const;
 			EXPORT INLINE void Update();
+			EXPORT INLINE unsigned int MulticastGroup() const;
 
 			EXPORT std::string GetIdent() const;
 			EXPORT int GetFlags() const;
@@ -49,12 +50,13 @@ namespace Netbootd
 			int broadcast;
 			int reuseaddr;
 			_SOCKET _socket;
-
+			ip_mreq mreq;
 			int af;
 			int type;
 			int flags;
 			int proto;
 			int backlog;
+			int multicast;
 
 			std::string mcastgroup;
 

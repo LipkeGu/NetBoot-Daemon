@@ -20,10 +20,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 EXPORT Netbootd::Network::Server server;
 EXPORT Netbootd::System::Filesystem fs;
-EXPORT void Handle_Request(const ServerMode serverMode,
-	const ServiceType serviceType, Netbootd::Network::client client);
+EXPORT void Handle_Request(const std::string& ident, const ServerMode serverMode,
+	const ServiceType serviceType, const char*, Netbootd::Network::client _client);
+EXPORT Netbootd::Network::client createIdent(const char* buffer, ServiceType serviceType,
+	Netbootd::Network::client& client);
+
+EXPORT void Select_Bootfile(Netbootd::Network::client* c);
+
+EXPORT void Handle_DHCP_Discover(const std::string& ident, Netbootd::Network::client* c,
+	Netbootd::Network::DHCP_Packet* packet);
+
+EXPORT void Handle_DHCP_Request(Netbootd::Network::client* c,
+	Netbootd::Network::DHCP_Packet* packet);
+
+
+
 EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
 	std::vector<DHCP_Option>* vendorOpts);
+
+EXPORT void GenerateMulticastOption(const std::string& ident, Netbootd::Network::
+	client* client, std::vector<DHCP_Option>* vendorOpts);
 
 EXPORT NetBootd::NetBootd()
 = default;
@@ -32,17 +48,21 @@ EXPORT void NetBootd::Init()
 {
 	printf("Network Boot daemon 0.4 (BETA)\nStarting Storage subsystem...\n");
 
-	fs.Init();
-
+	if (fs.Init())
+	{
 #ifdef _WIN32
-	if (!Netbootd::Network::Server::init_winsock())
-		return;
+		if (!Netbootd::Network::Server::init_winsock())
+			return;
 #endif
-	server.Add(UDP,
-		DHCP, "DHCP-Proxy");
+		server.AddEndpoint(UDP,
+			DHCP, "DHCP-Proxy");
 
-	server.Add(UDP,
-		BOOTP, "DHCP-Boot");
+		server.AddEndpoint(UDP,
+			BOOTP, "DHCP-Boot");
+
+		server.AddEndpoint(UDPMCAST,
+			TFTP, "TFTP-Server");
+	}
 }
 
 EXPORT int StripPacket(const char* buffer, int buflen)
@@ -55,7 +75,7 @@ EXPORT int StripPacket(const char* buffer, int buflen)
 	return buflen;
 }
 
-EXPORT const char* AddressStr(unsigned ip)
+EXPORT const char* AddressStr(const unsigned ip)
 {
 	struct in_addr addr {};
 	ClearBuffer(&addr, sizeof(addr));
@@ -64,133 +84,250 @@ EXPORT const char* AddressStr(unsigned ip)
 	return inet_ntoa(addr);
 }
 
-EXPORT void Handle_Request(const ServerMode serverMode,
-	const ServiceType serviceType, Netbootd::Network::client client)
+EXPORT Netbootd::Network::client createIdent(const char* buffer, ServiceType serviceType,
+	Netbootd::Network::client& client)
 {
-	char data[16385];
-	int pktsize = 0;
-	ClearBuffer(data, sizeof(16385));
-	Netbootd::Network::DHCP_Packet response;
+	char* hwaddr;
+	uint8_t hwadr[6];
+	switch (serviceType)
+	{
+	case BOOTP:
+	case DHCP:
+		hwaddr = new char[buffer[2] + 12];
+		ClearBuffer(hwaddr, buffer[2] + 12);
+
+		memcpy(&hwadr, &buffer[28], buffer[2]);
+
+		sprintf(hwaddr, "%02X:%02X:%02X:%02X:%02X:%02X", hwadr[0],
+			hwadr[1], hwadr[2], hwadr[3], hwadr[4], hwadr[5]);
+
+		client.ident = std::string(hwaddr);
+		delete[] hwaddr;
+
+		break;
+	case TFTP:
+	default:
+		client.ident = inet_ntoa(client.toAddr.sin_addr);
+		break;
+	}
+
+	return client;
+}
+
+
+EXPORT void Handle_DHCP_Discover(const std::string& ident, Netbootd::Network::client* c,
+	Netbootd::Network::DHCP_Packet* packet)
+{
+	std::vector<DHCP_Option> vendorops;
+
+	c->Protocol.dhcp.AddOption(DHCP_Option(static_cast
+		<unsigned char>(53), static_cast<unsigned char>
+		(Netbootd::Network::OFFER)));
+
+	switch (c->Protocol.dhcp.get_vendor())
+	{
+	case Netbootd::Network::PXEServer:
+	case Netbootd::Network::PXEClient:
+		if (c->Protocol.dhcp.rbcp.get_AllowBootMenue())
+		{
+			GenerateMulticastOption(ident, c, &vendorops);
+			GenerateBootMenue(c, &vendorops);
+
+			c->Protocol.dhcp.set_nextIP(server.LocalIP());
+
+			if (!vendorops.empty())
+			{
+				vendorops.emplace_back(255);
+				c->Protocol.dhcp.AddOption(DHCP_Option(43, vendorops));
+			}
+		}
+
+		
+		break;
+	default:;
+	}
+}
+
+EXPORT void Handle_DHCP_Request(const std::string& ident,
+	Netbootd::Network::client* c, Netbootd::Network::DHCP_Packet* packet)
+{
+	std::vector<DHCP_Option> vendorops;
 	char item[4];
-	auto bootitem = client.Protocol.dhcp.rbcp.get_item();
-	auto layer = client.Protocol.dhcp.rbcp.get_layer();
+	unsigned short bootitem = 0;
+	unsigned short layer = 0;
 	ClearBuffer(item, 4);
 
-	std::vector<DHCP_Option> vendorops;
+	c->Protocol.dhcp.AddOption(DHCP_Option(static_cast
+		<unsigned char>(53), static_cast<unsigned char>
+		(Netbootd::Network::ACK)));
+
+	switch (c->Protocol.dhcp.get_vendor())
+	{
+	case  Netbootd::Network::PXEClient:
+	case  Netbootd::Network::PXEServer:
+		if (c->Protocol.dhcp.rbcp.get_AllowBootMenue())
+		{
+			bootitem = c->Protocol.dhcp.rbcp.get_item();
+			layer = c->Protocol.dhcp.rbcp.get_layer();
+
+			GenerateMulticastOption(ident, c, &vendorops);
+
+			if (BS16(bootitem) != BS16(static_cast<unsigned short>(0)))
+			{
+				memcpy(&item[0], &bootitem, 2);
+				memcpy(&item[2], &layer, 2);
+				vendorops.emplace_back(71, 4, item);
+
+				c->Protocol.dhcp.set_nextIP(server.LocalIP());
+				c->Protocol.dhcp.set_servername(server.GetHostName());
+				Select_Bootfile(c);
+			}
+		}
+		else
+		{
+			Select_Bootfile(c);
+
+			c->Protocol.dhcp.set_nextIP(server.LocalIP());
+			c->Protocol.dhcp.AddOption(DHCP_Option(static_cast
+				<unsigned char>(54), server.LocalIP()));
+			c->Protocol.dhcp.set_servername(server.GetHostName());
+		}
+
+		if (!vendorops.empty())
+		{
+			vendorops.emplace_back(255);
+			c->Protocol.dhcp.AddOption(DHCP_Option(43, vendorops));
+		}
+	default:;
+	}
+}
+
+EXPORT void Select_Bootfile(Netbootd::Network::client* c)
+{
+	for (auto & a : c->Protocol.dhcp.arch)
+	{
+		switch (a)
+		{
+		case Netbootd::Network::INTEL_X86:
+			c->Protocol.dhcp.set_filename("Boot/x86/wdsnbp.com");
+			break;
+		case Netbootd::Network::NEC_PC98:
+			break;
+		case Netbootd::Network::EFI_ITAN:
+			break;
+		case Netbootd::Network::DEC_ALPHA:
+			break;
+		case Netbootd::Network::ARC_X86:
+			break;
+		case Netbootd::Network::INTEL_LEAN:
+			break;
+		case Netbootd::Network::EFI_IA32:
+			break;
+		case Netbootd::Network::EFI_BC:
+			c->Protocol.dhcp.set_filename("Boot/x64/efi/wdsmgfw.efi");
+			break;
+		case Netbootd::Network::EFI_XSCALE:
+			break;
+		case Netbootd::Network::EFI_X86X64:
+			c->Protocol.dhcp.set_filename("Boot/x86/wdsnbp.com");
+			break;
+		}
+	}
+}
+
+EXPORT void Handle_Request(const std::string& ident, const ServerMode serverMode,
+	const ServiceType serviceType, const char* buffer, Netbootd::Network::client _client)
+{
+	char data[16385];
+	auto pktsize = 0;
+	ClearBuffer(data, sizeof 16385);
+	Netbootd::Network::DHCP_Packet response;
+	Netbootd::Network::client c;
 
 	switch (serverMode)
 	{
+	case UDPMCAST:
 	case UDP:
+		server.AddClient(createIdent(buffer, serviceType, _client));
+		c = server.GetClient(_client.ident);
+
 		switch (serviceType)
 		{
 		case BOOTP:
 		case DHCP:
-			if (!client.Protocol.dhcp.HasOption(60))
-				return;
-
-			if (memcmp(&client.Protocol.dhcp.options.at(60).Value,
-				"PXEClient", strlen("PXEClient")) != 0)
-				return;
-
-			client.Protocol.dhcp.RemoveOption(55);
-			if (client.Protocol.dhcp.get_relayIP() != INADDR_ANY)
+			if (c.Protocol.dhcp.get_relayIP() != INADDR_ANY)
 			{
-				if (client.Protocol.dhcp.get_nextIP()
-					== client.Protocol.dhcp.get_relayIP())
-					return;
-
 				printf("[D] %s: Relay Agent: %s\n", __FUNCTION__,
-					AddressStr(client.Protocol.dhcp.get_relayIP()));
+					AddressStr(c.Protocol.dhcp.get_relayIP()));
+
+				if (c.Protocol.dhcp.get_relayIP() != INADDR_ANY)
+				{
+					c.toAddr.sin_addr.s_addr = c.Protocol.dhcp.get_relayIP();
+					c.toAddr.sin_port = serviceType == DHCP ? 67 : 4011;
+				}
 			}
-
-			client.Protocol.dhcp.set_opcode(Netbootd::Network::BOOTREPLY);
-			client.Protocol.dhcp.set_nextIP(server.LocalIP().s_addr);
-			client.Protocol.dhcp.set_servername(server.GetHostName());
-
-			// Set the Relayagent adress as response address...
-			if (client.Protocol.dhcp.get_relayIP() != INADDR_ANY)
-				client.toAddr.sin_addr.s_addr = client.Protocol.dhcp.get_relayIP();
-
-			client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-				<unsigned char>(54), server.LocalIP().s_addr));
-
-			switch (client.Protocol.dhcp.get_vendor())
+			else
 			{
-			case Netbootd::Network::PXEServer:
-				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-					<unsigned char>(60), 9, "PXEServer"));
-				break;
-			case Netbootd::Network::PXEClient:
-				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-					<unsigned char>(60), 9, "PXEClient"));
-
-				if (client.Protocol.dhcp.IsEtherBootClient())
-					printf("[I] Client reports EtherBoot capabilities!\n");
-
-				client.Protocol.dhcp.set_filename("Boot/x86/wdsnbp.com");
-				break;
-			case Netbootd::Network::APPLEBSDP:
-				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-					<unsigned char>(60), 9, "APPLEBSDP"));
-				break;
-			default:
-				return;
-			}
-
-			switch (static_cast<Netbootd::Network::DHCPMSGTYPE>(
-				client.Protocol.dhcp.options.at(53).Value[0]))
-			{
-			case Netbootd::Network::DISCOVER:
-				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-					<unsigned char>(53), static_cast<unsigned char>
-					(Netbootd::Network::OFFER)));
-
-				switch (client.Protocol.dhcp.get_vendor())
+				switch (c.Protocol.dhcp.get_vendor())
 				{
 				case Netbootd::Network::PXEClient:
-					vendorops.emplace_back(static_cast<unsigned char>(6),
-						static_cast<unsigned char>(6));
-
-					GenerateBootMenue(&client, &vendorops);
+				case Netbootd::Network::PXEServer:
+					printf("Got PXE request from: %s\n", c.ident.c_str());
 					break;
-				default:;
+				default: return;
 				}
-				break;
-			case Netbootd::Network::REQUEST:
-			case Netbootd::Network::INFORM:
-				client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-					<unsigned char>(53), static_cast<unsigned char>
-					(Netbootd::Network::ACK)));
 
-				switch (client.Protocol.dhcp.get_vendor())
+				c.Protocol.dhcp.set_opcode(Netbootd::Network::BOOTREPLY);
+
+				switch (c.Protocol.dhcp.get_vendor())
 				{
-				case  Netbootd::Network::PXEClient:
-				case  Netbootd::Network::PXEServer:
-					memcpy(&item[0], &bootitem, 2);
-					memcpy(&item[2], &layer, 2);
-						vendorops.emplace_back(DHCP_Option(71, 4, item));
+				case Netbootd::Network::PXEServer:
+					c.Protocol.dhcp.AddOption(DHCP_Option(static_cast
+						<unsigned char>(60), 9, "PXEServer"));
 					break;
-				default:;
+				case Netbootd::Network::PXEClient:
+					c.Protocol.dhcp.AddOption(DHCP_Option(static_cast
+						<unsigned char>(60), 9, "PXEClient"));
+					break;
+				default:
+					return;
 				}
-				
-				break;
-			default:
-				return;
+
+				switch (static_cast<Netbootd::Network::DHCPMSGTYPE>(
+					c.Protocol.dhcp.options.at(53).Value[0]))
+				{
+				case Netbootd::Network::DISCOVER:
+					Handle_DHCP_Discover(ident, &c, &response);
+					break;
+				case Netbootd::Network::REQUEST:
+				case Netbootd::Network::INFORM:
+					Handle_DHCP_Request(ident, &c, &response);
+					break;
+				case Netbootd::Network::RELEASE:
+					server.RemoveClient(c.ident);
+					break;
+				default:
+					return;;
+				}
+
+				c.Protocol.dhcp.AddOption(DHCP_Option(static_cast
+					<unsigned char>(255)));
 			}
 
-			if (!vendorops.empty())
-				client.Protocol.dhcp.AddOption(DHCP_Option(43, vendorops));
-
-			client.Protocol.dhcp.AddOption(DHCP_Option(static_cast
-				<unsigned char>(255)));
-
-			response = Netbootd::Network::DHCP_Packet(client);
+			response = Netbootd::Network::DHCP_Packet(c);
 			pktsize = sizeof(response);
 
 			memcpy(&data, &response, pktsize);
 			pktsize = StripPacket(data, pktsize);
+			
+			server.Send(ident, c, data, pktsize);
+			server.RemoveClient(c.ident);
+			break;
+		case TFTP:
+			server.AddClient(createIdent(buffer, serviceType, _client));
+			c = server.GetClient(_client.ident);
 
-			server.Send(client, data, pktsize);
+			printf("Got TFTP request from: %s\n", c.ident.c_str());
 			break;
 		default:;
 		}
@@ -199,85 +336,105 @@ EXPORT void Handle_Request(const ServerMode serverMode,
 	}
 }
 
+EXPORT void GenerateMulticastOption(const std::string& ident, Netbootd::Network::
+	client* client, std::vector<DHCP_Option>* vendorOpts)
+{
+	vendorOpts->emplace_back(static_cast<unsigned char>(6),
+		static_cast<unsigned char>(SETTINGS.DISCOVERY_MODE));
+
+	client->Protocol.dhcp.rbcp.mcastIP = server.LocalMCASTIP(ident);
+
+	vendorOpts->emplace_back(static_cast<unsigned char>(1),
+		static_cast<unsigned int>(client->Protocol.dhcp.rbcp.mcastIP));
+
+	vendorOpts->emplace_back(static_cast<unsigned char>(2),
+		static_cast<unsigned short>(client->Protocol.dhcp.rbcp.mcast_port));
+}
+
 EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
 	std::vector<DHCP_Option>* vendorOpts)
 {
 	std::vector<Netbootd::Network::BootMenuEntry> BootMenu;
 	std::vector<Netbootd::Network::BootServerEntry> bootserver;
 
-	BootMenu.emplace_back(BootMenu.size(), "Local Boot");
-	BootMenu.emplace_back(BootMenu.size(), "WDS Server (VPN)");
-	
-	int offset = 0;
+	BootMenu.emplace_back(static_cast<unsigned short>(BootMenu.size()),
+		"Local Boot");
+
+	BootMenu.emplace_back(static_cast<unsigned short>(BootMenu.size()),
+		server.GetHostName(), server.LocalIP());
+
+	BootMenu.emplace_back(static_cast<unsigned short>(BootMenu.size()),
+		"FBS01.FBLIPKE.DE", inet_addr("10.20.0.1"));
+
+	_SIZE_T offset = 0;
 	unsigned short id = 0;
 	char menubuffer[1024];
 	char serverbuffer[1024];
 
-	ClearBuffer(menubuffer, 1024);
-	ClearBuffer(menubuffer, 1024);
+	ClearBuffer(menubuffer, sizeof menubuffer);
+	ClearBuffer(serverbuffer, sizeof serverbuffer);
 
 	for (auto & entry : BootMenu)
 	{
-		unsigned short x = BS16(id);
+		unsigned short x = BS16(id++);
 		memcpy(&menubuffer[offset], &x, 2);
 		offset += 2;
 
 		/* desc len */
 		auto length = static_cast<unsigned char>(strlen(entry.Description.c_str()));
-		memcpy(&menubuffer[offset], &length, 1);
+		memcpy(&menubuffer[offset], &length, sizeof(unsigned char));
 		offset += 1;
 
 		/* desc */
 		memcpy(&menubuffer[offset], entry.Description.c_str(), length);
 		offset += length;
 
-		bootserver.emplace_back(x, server.LocalIP().s_addr);
-
-		id = id++;
+		bootserver.emplace_back(x, entry.Address);
 	}
 
 	vendorOpts->emplace_back(9, offset, menubuffer);
-
 	offset = 0;
 
 	for (auto & entry : bootserver)
 	{
-		memcpy(&serverbuffer[offset], &entry.ident, 2);
-		offset += 2;
+		memcpy(&serverbuffer[offset], &entry.ident, sizeof(unsigned short));
+		offset += sizeof(unsigned short);
 
-		memcpy(&serverbuffer[offset], &entry.Type, 1);
-		offset += 1;
+		memcpy(&serverbuffer[offset], &entry.Type, sizeof(unsigned char));
+		offset += sizeof(unsigned char);
 
-		memcpy(&serverbuffer[offset], &entry.Addresses, 4);
-		offset += 4;
+		memcpy(&serverbuffer[offset], &entry.Addresses, sizeof(unsigned int));
+		offset += sizeof(unsigned int);
 	}
 
 	vendorOpts->emplace_back(8, offset, serverbuffer);
 
 	/* Menue prompt */
 	char promptbuffer[512];
-	ClearBuffer(menubuffer, 512);
+	ClearBuffer(menubuffer, sizeof promptbuffer);
 	offset = 0;
 
-	unsigned char timeout = 0xff;
+	auto timeout = 0x0a;
 
-	memcpy(&promptbuffer[offset], &timeout, 1);
+	memcpy(&promptbuffer[offset], &timeout, sizeof(unsigned char));
 	offset += 1;
-	std::string prompt = "Select a Server...";
+	const std::string prompt = "Press [F8] to select a Server...";
 
-	memcpy(&promptbuffer[offset], prompt.c_str(), prompt.size());
-	offset += prompt.size();
+	memcpy(&promptbuffer[offset], prompt.c_str(),
+		static_cast<_SIZE_T>(prompt.size()));
+
+	offset += static_cast<_SIZE_T>(prompt.size());
 
 	vendorOpts->emplace_back(10, offset, promptbuffer);
 }
 
-EXPORT void NetBootd::Listen() const
+EXPORT void NetBootd::Listen()
 {
 	if (server.Init() && server.Bind())
 		server.Listen(&Handle_Request);
 }
 
-EXPORT INLINE void NetBootd::Close() const
+EXPORT INLINE void NetBootd::Close()
 {
 	if (!server.Close())
 		printf("Failed to shutdown server!\n");

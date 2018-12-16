@@ -14,13 +14,15 @@
 #define ClearBuffer(x, y) memset(x, 0, y);
 
 #include <WinSock2.h>
-
+#include <Ws2tcpip.h>
 #pragma comment(lib, "Ws2_32.lib")
 
 #ifdef _WIN64
 typedef unsigned long long _SOCKET;
+typedef unsigned long long _SIZE_T;
 #else
 typedef unsigned int	_SOCKET;
+typedef unsigned int	_SIZE_T;
 #endif
 #else
 #define INLINE inline
@@ -32,6 +34,16 @@ typedef	_SOCKET			unsigned int;
 #define DEBUG
 #endif
 #endif
+
+static struct
+{
+	unsigned char DISCOVERY_MODE = 6;
+	unsigned char PXEBOOTMENUE = 1;
+
+	std::string MTFTP_ADDR = "224.20.0.1";
+	unsigned short MTFTP_PORT = 1069;
+} SETTINGS;
+
 EXPORT typedef enum ServerMode
 {
 	TCP = 0,

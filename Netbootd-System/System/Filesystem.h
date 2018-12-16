@@ -20,26 +20,32 @@ namespace Netbootd
 			EXPORT Filesystem(std::string filename, FileOpenMode mode);
 			EXPORT ~Filesystem();
 
-			EXPORT bool Init();
+			EXPORT bool Init() const;
 
-			EXPORT unsigned int Write(const char* data, unsigned int length, unsigned int byteswritten, long seek);
-			EXPORT unsigned int Read(char* dest, unsigned int dest_offset, long seek, unsigned int length) const;
+			EXPORT _SIZE_T Write(const char* data, const _SIZE_T length,
+				_SIZE_T offset, const long seek) const;
+
+			EXPORT _SIZE_T Read(char* dest, const _SIZE_T offset,
+				const long seek, const _SIZE_T length) const;
+			static
 			EXPORT std::string ResolvePath(const std::string& path);
+			static
 			EXPORT bool CreateDir(const std::string& path);
+			static
 			EXPORT std::string GetCurDir();
 			EXPORT bool Open();
-			EXPORT bool Exist();
-			EXPORT std::string Name();
-			EXPORT long Length();
-			EXPORT std::string CType();
-			EXPORT int  Close();
+			EXPORT INLINE bool Exist() const;
+			EXPORT INLINE std::string Name() const;
+			EXPORT INLINE _SIZE_T Length() const;
+			EXPORT INLINE std::string get_ctype() const;
+			EXPORT INLINE void set_ctype(const std::string& ctype);
+			EXPORT int Close();
 
 		private:
 			std::string workingDir;
-			unsigned int byteswritten;
 
 			bool isOpen;
-			unsigned int filesize;
+			_SIZE_T filesize;
 			std::string ctype;
 			FILE* file;
 			std::string filename;

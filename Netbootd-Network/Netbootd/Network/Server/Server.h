@@ -35,32 +35,42 @@ namespace Netbootd
 			EXPORT static bool close_winsock();
 #endif
 			EXPORT INLINE bool IsListening() const;
-			EXPORT bool Add(const ServerMode serverMode,
+			EXPORT bool AddEndpoint(const ServerMode serverMode,
 				const ServiceType serviceType, const std::string& ident);
 
-			EXPORT bool HasEndpoint(const std::string& ident);
+			EXPORT bool AddClient(client c);
+
+			EXPORT bool HasEndpoint(const std::string& ident) const;
+			EXPORT bool HasClient(const std::string& ident) const;
 			EXPORT INLINE bool HasEndpoints() const;
-			EXPORT bool Init(long sec = 0, long usec = 2);
+			EXPORT INLINE bool HasClients() const;
+			EXPORT unsigned int LocalMCASTIP(const std::string& ident) const;
+			EXPORT bool Init(const bool muticast = true, const long sec = 0, const long usec = 2);
 			EXPORT bool Bind();
 			EXPORT bool Close();
-			EXPORT in_addr LocalIP() const;
+			EXPORT bool MulticastEnabled() const;
+			EXPORT unsigned int LocalIP() const;
 			EXPORT void Update();
-			EXPORT void Remove(const std::string& ident);
-			EXPORT void Listen(void(*ListenCallBack)
-				(const ServerMode, const ServiceType, client));
+			EXPORT void RemoveEndpoint(const std::string& ident);
+			EXPORT void RemoveClient(const std::string& ident);
 
-			EXPORT int Send(client& client, const char* buffer, int length);
+			EXPORT void Listen(void(*ListenCallBack)
+				(const std::string&, const ServerMode, const ServiceType, const char*, client));
+
+			EXPORT int Send(const std::string& ident, client& client,
+				const char* buffer, int length);
 
 			EXPORT INLINE std::string GetHostName() const;
-			EXPORT INLINE Endpoint GetEndpoint(const std::string& id);
-		private:
-
+			EXPORT INLINE Endpoint GetEndpoint(const std::string& id) const;
+			EXPORT INLINE client& GetClient(const std::string& id);
+			std::map<std::string, client> clients;
+			private:
+			
 			std::map<std::string, Endpoint> endpoints;
 			std::string hName;
-
+			bool multicast;
 			bool listening;
 			timeval timeout;
-			ServiceType serviceType;
 			fd_set fd_read;
 			fd_set fd_write;
 			fd_set fd_except;
@@ -70,7 +80,8 @@ namespace Netbootd
 			const _SOCKET __socket, client client, const char* buffer, int length);
 
 		EXPORT void __Listen(const ServerMode serverMode, const ServiceType serviceType,
-			const std::string ident, const _SOCKET _socket, const int flags,
-			const int backlog, void(*ListenCallBack)(const ServerMode, const ServiceType, client));
+			const std::string& ident, const _SOCKET _socket, const int flags,
+			const int backlog, void(*ListenCallBack)
+				(const std::string&, const ServerMode, const ServiceType, const char*, client));
 	}
 }

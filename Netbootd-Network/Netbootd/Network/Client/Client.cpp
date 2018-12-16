@@ -33,22 +33,21 @@ namespace Netbootd
 				this->Protocol.dhcp.hwlength = buffer[2];
 				this->Protocol.dhcp.hops = buffer[3];
 
-				memcpy(&this->Protocol.dhcp.xid, &buffer[4], 4);
-				memcpy(&this->Protocol.dhcp.secs, &buffer[8], 2);
-				memcpy(&this->Protocol.dhcp.flags, &buffer[10], 2);
-				memcpy(&this->Protocol.dhcp.ciaddr, &buffer[12], 4);
-				memcpy(&this->Protocol.dhcp.yiaddr, &buffer[16], 4);
-				memcpy(&this->Protocol.dhcp.siaddr, &buffer[20], 4);
-				memcpy(&this->Protocol.dhcp.giaddr, &buffer[24], 4);
-				memcpy(&this->Protocol.dhcp.chaddr, &buffer[28], 16);
+				memcpy(&this->Protocol.dhcp.xid, &buffer[4], sizeof(unsigned int));
+				memcpy(&this->Protocol.dhcp.secs, &buffer[8], sizeof(unsigned short));
+				memcpy(&this->Protocol.dhcp.flags, &buffer[10], sizeof(unsigned short));
+				memcpy(&this->Protocol.dhcp.ciaddr, &buffer[12], sizeof(unsigned int));
+				memcpy(&this->Protocol.dhcp.yiaddr, &buffer[16], sizeof(unsigned int));
+				memcpy(&this->Protocol.dhcp.siaddr, &buffer[20], sizeof(unsigned int));
+				memcpy(&this->Protocol.dhcp.giaddr, &buffer[24], sizeof(unsigned int));
+				memcpy(&this->Protocol.dhcp.chaddr, &buffer[28], (sizeof(unsigned int) * 4));
 
 				ClearBuffer(&this->Protocol.dhcp.sname, sizeof(this->Protocol.dhcp.sname));
 				gethostname(this->Protocol.dhcp.sname, sizeof(this->Protocol.dhcp.sname));
 
 				for (auto i = 240; i < length; i++)
 				{
-					if (static_cast<unsigned char>(buffer[i]) == static_cast<unsigned char>(0xff) ||
-						static_cast<unsigned char>(buffer[i]) == -1)
+					if (static_cast<unsigned char>(buffer[i]) == static_cast<unsigned char>(0xff))
 						break;
 
 					if (static_cast<unsigned char>(buffer[i + 1]) == static_cast<unsigned char>(1))
@@ -61,19 +60,29 @@ namespace Netbootd
 					i += 1 + buffer[i + 1];
 				}
 
+				switch (Protocol.dhcp.get_flags())
+				{
+				case Broadcast:
+					Protocol.dhcp.broadcast = true;
+					break;
+				case Unicast:
+					Protocol.dhcp.broadcast = false;
+					break;
+				}
+
 				if (Protocol.dhcp.HasOption(60))
 				{
 					char vendor[9];
-					ClearBuffer(vendor, 9);
-					memcpy(&vendor, this->Protocol.dhcp.options.at(60).Value, 9);
+					ClearBuffer(vendor, sizeof vendor);
+					memcpy(&vendor, this->Protocol.dhcp.options.at(60).Value, sizeof vendor);
 
-					if (memcmp(vendor, "PXEClient", 9) == 0)
+					if (memcmp(vendor, "PXEClient", sizeof vendor) == 0)
 						this->Protocol.dhcp.set_vendor(PXEClient);
 
-					if (memcmp(vendor, "PXEServer", 9) == 0)
+					if (memcmp(vendor, "PXEServer", sizeof vendor) == 0)
 						this->Protocol.dhcp.set_vendor(PXEServer);
 
-					if (memcmp(vendor, "APPLEBSDP", 9) == 0)
+					if (memcmp(vendor, "APPLEBSDP", sizeof vendor) == 0)
 						this->Protocol.dhcp.set_vendor(APPLEBSDP);
 				}
 				else
@@ -82,14 +91,12 @@ namespace Netbootd
 				if (this->Protocol.dhcp.HasOption(77))
 				{
 					char value[4];
-					ClearBuffer(value, 4);
-					memcpy(&value, this->Protocol.dhcp.options.at(77).Value, 4);
+					ClearBuffer(value, sizeof value);
+					memcpy(&value, this->Protocol.dhcp.options.at(77).Value, sizeof value);
 
-					if (memcmp(value, "iPXE", 4) == 0)
-					{
+					if (memcmp(value, "iPXE", sizeof value) == 0)
 						if (this->Protocol.dhcp.HasOption(175))
 							this->Protocol.dhcp.isEtherBootClient = true;
-					}
 					else
 						this->Protocol.dhcp.isEtherBootClient = false;
 				}
@@ -97,7 +104,7 @@ namespace Netbootd
 				if (Protocol.dhcp.HasOption(43))
 				{
 					char vendorbuffer[512];
-					ClearBuffer(vendorbuffer, 512);
+					ClearBuffer(vendorbuffer, sizeof vendorbuffer);
 
 					memcpy(vendorbuffer, Protocol.dhcp.options.at(43).Value,
 						Protocol.dhcp.options.at(43).Length);
@@ -116,6 +123,8 @@ namespace Netbootd
 						i += 1 + vendorbuffer[i + 1];
 					}
 
+					this->Protocol.dhcp.RemoveOption(55);
+
 					for (auto & opt : option)
 					{
 						if (opt.Option == static_cast<unsigned char>(71))
@@ -123,16 +132,29 @@ namespace Netbootd
 							unsigned short layer = 0;
 							unsigned short type = 0;
 
-							memcpy(&type, &opt.Value[0], 2);
+							memcpy(&type, &opt.Value[0], sizeof(unsigned short));
 							Protocol.dhcp.rbcp.set_item(type);
 
-							memcpy(&layer, &opt.Value[2], 2);
+							memcpy(&layer, &opt.Value[2], sizeof(unsigned short));
 							Protocol.dhcp.rbcp.set_layer(layer);
 						}
 					}
-
-					printf("Got vendor informations.\n");
 				}
+
+				if (this->Protocol.dhcp.HasOption(93))
+				{
+					for (auto i = 0; i < Protocol.dhcp.options.at(93).Length; i = i + 2)
+					{
+						Protocol.dhcp.arch.emplace_back(static_cast<DHCPARCH>
+							(Protocol.dhcp.options.at(93).Value[i]));
+						
+						Protocol.dhcp.arch.emplace_back(static_cast<DHCPARCH>
+							(Protocol.dhcp.options.at(93).Value[i + 1]));
+					}
+				}
+
+				break;
+			case TFTP:
 
 				break;
 			default:;
@@ -153,9 +175,13 @@ namespace Netbootd
 			this->toAddr.sin_addr.s_addr = (remote.sin_addr.s_addr == 0)
 				? INADDR_BROADCAST : remote.sin_addr.s_addr;
 
+			this->Protocol.dhcp.broadcast = remote.sin_addr.s_addr == 0;
 			this->Init(buffer, length);
 		}
 
-
+		EXPORT void client::Update() const
+		{
+			
+		}
 	}
 }

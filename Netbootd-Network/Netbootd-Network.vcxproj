@@ -24,6 +24,8 @@
     <ClInclude Include="Netbootd\NetBootd.h" />
     <ClInclude Include="Netbootd\Network\Protocol\DHCP.h" />
     <ClInclude Include="Netbootd\Network\Protocol\DHCP_Defines.h" />
+    <ClInclude Include="Netbootd\Network\Protocol\TFTP.h" />
+    <ClInclude Include="Netbootd\Network\Protocol\TFTP_Defines.h" />
     <ClInclude Include="Netbootd\Network\Server\Endpoint.h" />
     <ClInclude Include="Netbootd\Network\Server\Server.h" />
   </ItemGroup>
@@ -128,7 +130,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -145,7 +147,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

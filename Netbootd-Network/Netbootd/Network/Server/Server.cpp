@@ -39,31 +39,49 @@ namespace Netbootd
 		EXPORT Server::Server(const ServerMode serverMode,
 			const ServiceType serviceType, const std::string& ident)
 		{
-			Add(serverMode, serviceType, ident);
+			AddEndpoint(serverMode, serviceType, ident);
 		}
 
 		EXPORT Server::~Server()
 			= default;
 
-		EXPORT bool Server::Add(const ServerMode serverMode,
+		EXPORT bool Server::AddEndpoint(const ServerMode serverMode,
 			const ServiceType serviceType, const std::string& ident)
 		{
 			if (this->HasEndpoint(ident))
 				return false;
 
 			this->endpoints.insert(std::pair<std::string, Endpoint>
-				(ident, Endpoint(serverMode, serviceType, ident)));
+				(ident, Endpoint(this->LocalIP(), serverMode, serviceType, ident)));
 
 			return this->HasEndpoint(ident);
 		}
 
-		EXPORT void Server::Remove(const std::string& ident)
+		EXPORT bool Server::AddClient(client c)
+		{
+			if (this->HasClient(c.ident))
+				return false;
+
+			this->clients.insert(std::pair<std::string, client>(c.ident, c));
+
+			return this->HasClient(c.ident);
+		}
+
+		EXPORT void Server::RemoveEndpoint(const std::string& ident)
 		{
 			if (!this->HasEndpoint(ident))
 				return;
 
 			this->endpoints.at(ident)
 				.RequestClose();
+		}
+
+		EXPORT void Server::RemoveClient(const std::string& ident)
+		{
+			if (!this->HasClient(ident))
+				return;
+
+			this->clients.erase(ident);
 		}
 
 		EXPORT INLINE bool Server::IsListening() const
@@ -87,9 +105,16 @@ namespace Netbootd
 			return retval == 0;
 		}
 
-		EXPORT bool Server::Init(const long sec, const long usec)
+		EXPORT bool Server::MulticastEnabled() const
+		{
+			return this->multicast;
+		}
+
+		EXPORT bool Server::Init(const bool multicast,
+			const long sec, const long usec)
 		{
 			auto retval = 0;
+			this->multicast = multicast;
 			this->timeout.tv_sec = sec;
 			this->timeout.tv_usec = usec;
 
@@ -110,33 +135,38 @@ namespace Netbootd
 			{
 				const auto result = endpoint.second.Bind();
 				if (result == SOCKET_ERROR)
-					printf("[E] BIND: (%s): Failed!\n",
+					printf("[E] Bind: (%s): Failed!\n",
 						endpoint.second.GetIdent().c_str());
 				else
-					printf("[I] BIND: (%s): Ok!\n",
+					printf("[I] Bind: (%s): Ok!\n",
 						endpoint.second.GetIdent().c_str());
 				retval += result;
 			}
 
 			char hname[64];
-			ClearBuffer(&hname, sizeof(hname));
+			ClearBuffer(&hname, sizeof hname);
 
-			gethostname(hname, sizeof(hname));
+			gethostname(hname, sizeof hname);
 			this->hName = std::string(hname);
-
 			this->listening = (retval == 0);
 
 			return this->IsListening();
 		}
 
-		EXPORT in_addr Server::LocalIP() const
+		EXPORT unsigned int Server::LocalIP() const
 		{
 			const auto hostentry = gethostbyname(this->hName.c_str())->h_addr_list;
-			return **reinterpret_cast<struct in_addr**>(hostentry);
+			return (**reinterpret_cast<struct in_addr**>(hostentry)).s_addr;
+		}
+
+		EXPORT unsigned int Server::LocalMCASTIP(const std::string& ident) const
+		{
+			return GetEndpoint(ident)
+			.MulticastGroup();
 		}
 
 		EXPORT void Server::Listen(void(*ListenCallBack)
-			(const ServerMode, const ServiceType, client))
+			(const std::string&, const ServerMode, const ServiceType, const char*, client))
 		{
 			while (this->IsListening())
 			{
@@ -157,7 +187,7 @@ namespace Netbootd
 					FD_SET(endpoint.second.GetSocket(), &this->fd_read);
 					FD_SET(endpoint.second.GetSocket(), &this->fd_except);
 
-					const auto state = select((int)endpoint.second.GetSocket(),
+					const auto state = select(static_cast<int>(endpoint.second.GetSocket()),
 						&this->fd_read, &this->fd_write, &this->fd_except,
 						&this->timeout);
 
@@ -197,18 +227,25 @@ namespace Netbootd
 			}
 		}
 
-		EXPORT Endpoint Server::GetEndpoint(const std::string& id)
+		EXPORT INLINE Endpoint Server::GetEndpoint(const std::string& id) const
 		{
 			return this->endpoints.at(id);
 		}
 
+		EXPORT INLINE client& Server::GetClient(const std::string& id)
+		{
+			return this->clients.at(id);
+		}
+
 		EXPORT void Server::Update()
 		{
-			if (!this->HasEndpoints())
-				return;
+			if (this->HasEndpoints())
+				for (auto & endpoint : this->endpoints)
+					endpoint.second.Update();
 
-			for (auto & endpoint : this->endpoints)
-				endpoint.second.Update();
+			if (this->HasClients())
+				for (auto & client : this->clients)
+					client.second.Update();
 		}
 
 		EXPORT std::string Server::GetHostName() const
@@ -216,10 +253,16 @@ namespace Netbootd
 			return this->hName;
 		}
 
-		EXPORT INLINE bool Server::HasEndpoint(const std::string& ident)
+		EXPORT INLINE bool Server::HasEndpoint(const std::string& ident) const
 		{
 			return this->endpoints.find(ident)
 				!= this->endpoints.end();
+		}
+
+		EXPORT INLINE bool Server::HasClient(const std::string& ident) const
+		{
+			return this->clients.find(ident)
+				!= this->clients.end();
 		}
 
 		EXPORT INLINE bool Server::HasEndpoints() const
@@ -227,35 +270,42 @@ namespace Netbootd
 			return !this->endpoints.empty();
 		}
 
-		EXPORT int Server::Send(client& client, const char* buffer, int length)
+		EXPORT INLINE bool Server::HasClients() const
+		{
+			return !this->clients.empty();
+		}
+
+		EXPORT int Server::Send(const std::string& ident,
+			client& client, const char* buffer, int length)
 		{
 			const auto retval = SOCKET_ERROR;
 
-			if (!this->HasEndpoint(client.ident))
+			if (!this->HasEndpoint(ident))
 				return retval;
 
-			if (!this->IsListening() || this->GetEndpoint(client.ident)
+			if (!this->IsListening() || this->GetEndpoint(ident)
 				.CloseRequested())
 				return retval;
 
 			if (length != 0)
 			{
 				FD_ZERO(&this->fd_write);
-				FD_SET(this->GetEndpoint(client.ident).GetSocket(), &this->fd_write);
+				FD_SET(this->GetEndpoint(ident).GetSocket(), &this->fd_write);
 
-				if (!FD_ISSET(this->GetEndpoint(client.ident).GetSocket(), &this->fd_write))
+				if (!FD_ISSET(this->GetEndpoint(ident)
+					.GetSocket(), &this->fd_write))
 					return 0;
 
 				std::thread __sendthread(__Send,
-					this->GetEndpoint(client.ident).GetMode(),
-					this->GetEndpoint(client.ident).GetType(),
-					this->GetEndpoint(client.ident).GetSocket(),
+					this->GetEndpoint(ident).GetMode(),
+					this->GetEndpoint(ident).GetType(),
+					this->GetEndpoint(ident).GetSocket(),
 					client, buffer, length);
 
 				__sendthread.join();
 
-				FD_CLR(this->GetEndpoint(client.ident).GetSocket(), &this->fd_write);
-
+				FD_CLR(this->GetEndpoint(ident)
+					.GetSocket(), &this->fd_write);
 			}
 
 			return retval;

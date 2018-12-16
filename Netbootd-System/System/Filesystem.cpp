@@ -9,26 +9,25 @@ namespace Netbootd
 			this->workingDir = GetCurDir();
 			this->mode = mode;
 			this->filesize = 0;
-			this->filename = this->ResolvePath(filename);
+			this->filename = ResolvePath(filename);
 			this->isOpen = this->Open();
 			this->ctype = nullptr;
+			this->file = nullptr;
 
 			if (this->isOpen)
 			{
 				if (this->filename.find(".txt") != std::string::npos)
-					this->ctype = "text/plain";
-
+					this->set_ctype("text/plain");
+					
 				if (this->filename.find(".bcd") != std::string::npos)
-					this->ctype = "application/octet-stream";
-
+					this->set_ctype("application/octet-stream");
+					
 				if (this->filename.find(".wim") != std::string::npos)
-					this->ctype = "application/octet-stream";
+					this->set_ctype("application/octet-stream");
 
 				if (this->filename.find(".sdi") != std::string::npos)
-					this->ctype = "application/octet-stream";
+					this->set_ctype("application/octet-stream");
 			}
-			else
-				this->ctype = "";
 		}
 
 		EXPORT bool Filesystem::Open()
@@ -36,19 +35,18 @@ namespace Netbootd
 			switch (this->mode)
 			{
 			case FileWrite:
-				this->file = fopen(this->filename.c_str(), "w");
+				this->file = fopen(this->filename.c_str(), "we");
 				break;
 			case FileRead:
-				this->file = fopen(this->filename.c_str(), "r");
+				this->file = fopen(this->filename.c_str(), "re");
 				break;
 			case FileReadBinary:
-				this->file = fopen(this->filename.c_str(), "rb");
+				this->file = fopen(this->filename.c_str(), "rbe");
 				break;
 			case FileWriteBinary:
-				this->file = fopen(this->filename.c_str(), "wb");
+				this->file = fopen(this->filename.c_str(), "wbe");
 				break;
 			default:
-				this->file = nullptr;
 				break;
 			}
 
@@ -61,90 +59,82 @@ namespace Netbootd
 
 					return true;
 				}
-				else
-					return false;
 			}
-			else
-				return false;
+
+			return false;
 		}
 
-		EXPORT bool Filesystem::Init()
+		EXPORT bool Filesystem::Init() const
 		{
 			CreateDir("tftp_root/");
 			CreateDir("tftp_root/Boot/");
-
-			CreateDir("tftp_root/OSChooser/");
-			CreateDir("tftp_root/Setup/");
-
 			CreateDir("tftp_root/Boot/x86/");
 			CreateDir("tftp_root/Boot/x86/efi/");
-
 			CreateDir("tftp_root/Boot/x64/");
 			CreateDir("tftp_root/Boot/x64/efi/");
+			CreateDir("tftp_root/OSChooser/");
+			CreateDir("tftp_root/Setup/");
 
 			return true;
 		}
 
 		EXPORT Filesystem::~Filesystem()
-		= default;
+			= default;
 
-		EXPORT unsigned int Filesystem::Write(const char* data,
-			unsigned int length, unsigned int byteswritten, long seek)
+		EXPORT size_t Filesystem::Write(const char* data,
+			const _SIZE_T length, _SIZE_T offset, const long seek) const
 		{
-			unsigned int res = 0;
+			_SIZE_T res = 0;
 
 			if (!this->isOpen || this->mode == FileRead || this->mode == FileReadBinary)
 				return res;
 
-			if (length > 0)
+			if (length > 0 && fseek(this->file, seek, 2) == 0)
 			{
-				if (fseek(this->file, seek, SEEK_END) == 0)
-				{
-					byteswritten += fwrite(data, 1, length, this->file);
-					res = byteswritten;
-				}
+				offset += fwrite(data, 1, length, this->file);
+				res = offset;
 			}
 
 			return res;
 		}
 
-		
-		EXPORT unsigned int Filesystem::Read(char* dest, unsigned int dest_offset, long seek, unsigned int length) const
+		EXPORT _SIZE_T Filesystem::Read(char* dest, const _SIZE_T offset,
+			const long seek, const _SIZE_T length) const
 		{
-			unsigned int res = 0;
+			_SIZE_T res = 0;
 
 			if (!this->isOpen || this->mode == FileWrite || this->mode == FileWriteBinary)
 				return res;
 
-			if (fseek(this->file, seek, SEEK_SET) == 0)
-				res = fread(&dest[dest_offset], 1, length, this->file);
+			if (fseek(this->file, seek, 0) == 0)
+				res = fread(&dest[offset], 1, length, this->file);
 
 			return res;
 		}
 
 		EXPORT int Filesystem::Close()
 		{
-			int retval = -1;
+			auto retval = -1;
+
 			if (!this->isOpen)
 				return retval;
 
 			retval = fclose(this->file);
 			this->filesize = 0;
-		
+
 			return retval;
 		}
 
-		EXPORT bool Filesystem::CreateDir(const std::string& path)
+		EXPORT INLINE bool Filesystem::CreateDir(const std::string& path)
 		{
-			printf("Creating Directory: %s\n",ResolvePath(path).c_str());
-
-			return CreateDirectory(ResolvePath(path).c_str(), nullptr) == 0;
+			return CreateDirectory(ResolvePath(path)
+				.c_str(), nullptr) == 0;
 		}
 
-		EXPORT const std::string replace(std::string& str,
+		EXPORT std::string replace(std::string& str,
 			const std::string& from, const std::string& to)
 		{
-			size_t start_pos = str.find(from);
+			auto start_pos = str.find(from);
 
 			while (str.find(from) != std::string::npos)
 			{
@@ -157,22 +147,27 @@ namespace Netbootd
 			return str;
 		}
 
-		EXPORT bool Filesystem::Exist()
+		EXPORT INLINE bool Filesystem::Exist() const
 		{
 			return this->isOpen;
 		}
 
-		EXPORT std::string Filesystem::CType()
+		EXPORT INLINE std::string Filesystem::get_ctype() const
 		{
 			return this->ctype;
 		}
 
-		EXPORT long Filesystem::Length()
+		EXPORT INLINE void Filesystem::set_ctype(const std::string& ctype)
+		{
+			this->ctype = ctype;
+		}
+
+		EXPORT INLINE _SIZE_T Filesystem::Length() const
 		{
 			return this->filesize;
 		}
 
-		EXPORT std::string Filesystem::Name()
+		EXPORT INLINE std::string Filesystem::Name() const
 		{
 			return this->filename;
 		}
@@ -208,11 +203,11 @@ namespace Netbootd
 		EXPORT std::string Filesystem::GetCurDir()
 		{
 			char cCurrentPath[260];
-			ClearBuffer(cCurrentPath,260);
+			ClearBuffer(cCurrentPath, sizeof cCurrentPath);
 #ifdef _WIN32
-			_getcwd(cCurrentPath, 260);
+			_getcwd(cCurrentPath, sizeof cCurrentPath);
 #else
-			getcwd(cCurrentPath, 260);
+			getcwd(cCurrentPath, sizeof cCurrentPath);
 #endif
 			return std::string(cCurrentPath);
 		}

@@ -38,15 +38,33 @@ namespace Netbootd
 			std::string Description;
 			unsigned short Ident;
 			unsigned char DescLength = 0;
-			BootMenuEntry(const unsigned short id, const std::string& text, const BootServerType type = PXEBootstrapServer)
-			{;
+			unsigned int Address = 0;
+
+			BootMenuEntry(const unsigned short id, const std::string& text,
+				const BootServerType type = PXEBootstrapServer)
+			{
 				Ident = id;
 				Type = type;
 				Description = text;
-				DescLength = Description.size();
+				DescLength = static_cast<unsigned char>(Description.size());
+			}
+
+			BootMenuEntry(const unsigned short id, const std::string& text, const unsigned int address,
+				const BootServerType type = PXEBootstrapServer)
+			{
+				Ident = id;
+				Type = type;
+				Address = address;
+				Description = text;
+				DescLength = static_cast<unsigned char>(Description.size());
 			}
 
 			~BootMenuEntry()
+			{
+
+			}
+			
+			BootMenuEntry()
 			{
 
 			}
@@ -64,6 +82,7 @@ namespace Netbootd
 			OFFER = 0x02,
 			REQUEST = 0x03,
 			ACK = 0x05,
+			RELEASE = 0x07,
 			INFORM = 0x08
 		} DHCPMSGTYPE;
 
@@ -77,6 +96,20 @@ namespace Netbootd
 			NETBOOTDC = 5,
 		} DHCPPXEVENDOR;
 
+		EXPORT typedef enum DHCPARCH
+		{
+			INTEL_X86 = 0x00,
+			NEC_PC98 = 0x01,
+			EFI_ITAN = 0x02,
+			DEC_ALPHA = 0x03,
+			ARC_X86 = 0x04,
+			INTEL_LEAN = 0x05,
+			EFI_IA32 = 0x06,
+			EFI_BC = 0x07,
+			EFI_XSCALE = 0x08,
+			EFI_X86X64 = 0x09
+		} DHCPARCH;
+		
 		EXPORT typedef enum EtherBootOption // iPXE, gPXE
 		{
 			Priority	= 0x01,

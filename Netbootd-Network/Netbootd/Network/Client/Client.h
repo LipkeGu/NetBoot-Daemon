@@ -24,13 +24,12 @@ namespace Netbootd
 		class client
 		{
 		public:
-			EXPORT client();;
-
+			EXPORT client() {}
 			EXPORT client(const ServiceType serviceType, const std::string& ident,
 				const sockaddr_in remote, const char* buffer, const int length);
 			EXPORT ~client();
 			EXPORT bool Init(const char* buffer, const int length);
-
+			EXPORT void Update() const;
 			std::string ident;
 			sockaddr_in toAddr;
 			ServiceType serviceType;
@@ -152,9 +151,10 @@ namespace Netbootd
 					EXPORT void set_nextIP(const unsigned int ip)
 					{
 						this->siaddr = ip;
-						auto x = AddressStr(this->siaddr);
+						const auto x = AddressStr(this->siaddr);
 
-						AddOption(DHCP_Option(66, static_cast<int>(strlen(x)), x));
+						AddOption(DHCP_Option(66, static_cast<unsigned char>
+							(strlen(x)), x));
 					}
 
 					EXPORT unsigned int get_nextIP() const
@@ -212,13 +212,20 @@ namespace Netbootd
 					EXPORT void set_filename(const std::string& file)
 					{
 						this->filename = file;
-						AddOption(DHCP_Option(67, static_cast<int>(this->filename.size()),
-							this->filename.c_str()));
+
+						AddOption(DHCP_Option(67, static_cast
+							<unsigned char>(this->filename.size()),
+								this->filename.c_str()));
 					}
 
 					EXPORT std::string get_filename() const
 					{
 						return this->filename;
+					}
+
+					EXPORT bool IsBroadcastRequest() const
+					{
+						return this->broadcast;
 					}
 
 					DHCPOPCODE opcode;
@@ -239,15 +246,21 @@ namespace Netbootd
 					std::string filename;
 					DHCPPXEVENDOR vendor;
 
+					std::vector<DHCPARCH> arch;
+					
+					bool broadcast = false;
+
 					bool isEtherBootClient = false;
 
 					struct
 					{
-						unsigned short type;
-						unsigned short layer;
+						unsigned short type = 0;
+						unsigned short layer = 0;
+						
+						unsigned int mcastIP = inet_addr(SETTINGS.MTFTP_ADDR.c_str());
+						unsigned short mcast_port = SETTINGS.MTFTP_PORT;
 
-						bool allowBootMenue;
-
+						bool allowBootMenue = SETTINGS.PXEBOOTMENUE == 1;
 
 						EXPORT unsigned short get_layer() const
 						{
@@ -259,7 +272,7 @@ namespace Netbootd
 							this->layer = BS16(type);
 						}
 
-						EXPORT unsigned short get_item()
+						EXPORT unsigned short get_item() const
 						{
 							return BS16(this->type);
 						}
@@ -297,16 +310,58 @@ namespace Netbootd
 					unsigned short windowsSize;
 					unsigned short lastAckedBlock;
 
-					EXPORT unsigned int get_bytesRead() const;
-					EXPORT void set_bytesRead(const unsigned int bytes);
+					EXPORT unsigned int get_bytesRead() const
+					{
+						return bytesRead;
+					}
 
-					EXPORT unsigned int get_bytesToRead() const;
-					EXPORT void set_bytesToRead(const unsigned int bytes);
+					EXPORT unsigned short get_block() const
+					{
+						return this->block;
+					}
+
+					EXPORT void set_block(const unsigned short block)
+					{
+						this->block = block;
+					}
+
+					EXPORT unsigned short get_blocksize() const
+					{
+						return this->blocksize;
+					}
+
+					EXPORT void set_blocksize(const unsigned short blocksize)
+					{
+						this->blocksize = blocksize;
+					}
+
+					EXPORT unsigned short get_windowsize() const
+					{
+						return this->windowsSize;
+					}
+
+					EXPORT void set_windowsize(const unsigned short windowsize)
+					{
+						this->windowsSize = windowsize;
+					}
+
+					EXPORT void set_bytesRead(const unsigned int bytes)
+					{
+						this->bytesRead = bytes;
+					}
+
+					EXPORT unsigned int get_bytesToRead() const
+					{
+						return this->bytesToRead;
+					}
+
+					EXPORT void set_bytesToRead(const unsigned int bytes)
+					{
+						this->bytesToRead = bytes;
+					}
 
 					EXPORT bool TFTP_HasOption(const char* option, const char* buffer, int length)
 					{
-						uint32_t i = 0;
-
 						for (auto i = 2; i < length; i++)
 							if (memcmp(option, &buffer[i], strlen(option)) == 0)
 								return true;

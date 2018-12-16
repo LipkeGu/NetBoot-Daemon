@@ -36,6 +36,12 @@
     <ClInclude Include="Netbootd\Network\Protocol\DHCP_Defines.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="Netbootd\Network\Protocol\TFTP.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="Netbootd\Network\Protocol\TFTP_Defines.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Netbootd\Network\Server\Endpoint.cpp">

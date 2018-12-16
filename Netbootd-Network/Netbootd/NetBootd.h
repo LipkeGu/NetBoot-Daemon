@@ -20,8 +20,10 @@ public:
 	EXPORT NetBootd();
 	static
 	EXPORT void Init();
-	EXPORT void Listen() const;
-	EXPORT INLINE void Close() const;
+	static
+	EXPORT void Listen();
+	static
+	EXPORT INLINE void Close();
 	EXPORT ~NetBootd();
 };
 
