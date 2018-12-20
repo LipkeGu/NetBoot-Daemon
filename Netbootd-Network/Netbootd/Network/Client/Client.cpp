@@ -13,6 +13,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #pragma once
 #include "Client.h"
+#include "../Protocol/TFTP.h"
 
 namespace Netbootd
 {
@@ -24,6 +25,11 @@ namespace Netbootd
 
 		EXPORT bool client::Init(const char* buffer, const int length)
 		{
+			_SIZE_T opt_pos;
+			char filename[255];
+			ClearBuffer(filename, 255);
+
+			Protocol.tftp.filename = std::string(filename);
 			switch (this->serviceType)
 			{
 			case DHCP:
@@ -95,11 +101,15 @@ namespace Netbootd
 					memcpy(&value, this->Protocol.dhcp.options.at(77).Value, sizeof value);
 
 					if (memcmp(value, "iPXE", sizeof value) == 0)
+					{
 						if (this->Protocol.dhcp.HasOption(175))
 							this->Protocol.dhcp.isEtherBootClient = true;
+					}
 					else
 						this->Protocol.dhcp.isEtherBootClient = false;
 				}
+
+				this->Protocol.dhcp.RemoveOption(55);
 
 				if (Protocol.dhcp.HasOption(43))
 				{
@@ -123,8 +133,6 @@ namespace Netbootd
 						i += 1 + vendorbuffer[i + 1];
 					}
 
-					this->Protocol.dhcp.RemoveOption(55);
-
 					for (auto & opt : option)
 					{
 						if (opt.Option == static_cast<unsigned char>(71))
@@ -147,7 +155,7 @@ namespace Netbootd
 					{
 						Protocol.dhcp.arch.emplace_back(static_cast<DHCPARCH>
 							(Protocol.dhcp.options.at(93).Value[i]));
-						
+
 						Protocol.dhcp.arch.emplace_back(static_cast<DHCPARCH>
 							(Protocol.dhcp.options.at(93).Value[i + 1]));
 					}
@@ -155,7 +163,26 @@ namespace Netbootd
 
 				break;
 			case TFTP:
+				Protocol.tftp.set_opcode(buffer);
 
+				switch (Protocol.tftp.get_opcode())
+				{
+				case TFTP_Read:
+					strncpy(filename, &buffer[2], sizeof filename);
+					Protocol.tftp.filename = std::string(filename);
+
+					if (Protocol.tftp.TFTP_HasOption(buffer, length, "blksize", opt_pos))
+						memcpy(&Protocol.tftp.blocksize, &buffer[opt_pos], 2);
+					else
+						Protocol.tftp.blocksize = static_cast<unsigned short>(1024);
+
+					if (Protocol.tftp.TFTP_HasOption(buffer, length, "windowsize", opt_pos))
+						memcpy(&Protocol.tftp.windowsSize, &buffer[opt_pos], 2);
+					else
+						Protocol.tftp.windowsSize = static_cast<unsigned short>(1);
+					break;
+				default: ;
+				}
 				break;
 			default:;
 			}

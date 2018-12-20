@@ -19,4 +19,10 @@
       <Filter>Quelldateien</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="serverlist.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="tftp_root\Boot\x86\wdsnbp.com" />
+  </ItemGroup>
 </Project>

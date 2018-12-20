@@ -4,6 +4,8 @@
 #include <string>
 #include <direct.h>
 #include <vector>
+#include <strstream>
+
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
 #define INLINE __inline
@@ -37,11 +39,17 @@ typedef	_SOCKET			unsigned int;
 
 static struct
 {
-	unsigned char DISCOVERY_MODE = 6;
+	unsigned char DISCOVERY_MODE = 3;
 	unsigned char PXEBOOTMENUE = 1;
+	unsigned char PXEPROMPTTIMEOUT = 255;
 
+	unsigned char PXE_MTFTP_TIMEOUT = 1;
+	unsigned char PXE_MTFTP_DELAY = 10;
+
+	std::string PXEPROMP = "Press [F8] to boot from network...";
 	std::string MTFTP_ADDR = "224.20.0.1";
-	unsigned short MTFTP_PORT = 1069;
+
+	unsigned short MTFTP_PORT = 69;
 } SETTINGS;
 
 EXPORT typedef enum ServerMode

@@ -55,10 +55,10 @@ namespace Netbootd
 			EXPORT void RemoveClient(const std::string& ident);
 
 			EXPORT void Listen(void(*ListenCallBack)
-				(const std::string&, const ServerMode, const ServiceType, const char*, client));
+				(const std::string&, const ServerMode, const ServiceType, const char*, _SIZE_T, client));
 
 			EXPORT int Send(const std::string& ident, client& client,
-				const char* buffer, int length);
+				const char* buffer, _SIZE_T length);
 
 			EXPORT INLINE std::string GetHostName() const;
 			EXPORT INLINE Endpoint GetEndpoint(const std::string& id) const;
@@ -77,11 +77,11 @@ namespace Netbootd
 		};
 
 		EXPORT void __Send(const ServerMode serverMode, const ServiceType serviceType,
-			const _SOCKET __socket, client client, const char* buffer, int length);
+			const _SOCKET __socket, client client, const char* buffer, _SIZE_T length);
 
 		EXPORT void __Listen(const ServerMode serverMode, const ServiceType serviceType,
 			const std::string& ident, const _SOCKET _socket, const int flags,
 			const int backlog, void(*ListenCallBack)
-				(const std::string&, const ServerMode, const ServiceType, const char*, client));
+				(const std::string&, const ServerMode, const ServiceType, const char*, _SIZE_T, client));
 	}
 }

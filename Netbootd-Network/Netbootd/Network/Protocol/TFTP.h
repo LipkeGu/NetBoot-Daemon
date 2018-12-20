@@ -3,8 +3,8 @@
 #define INLINE __inline
 #include "../Client/Client.h"
 
-#ifndef NETBOOTD_PROTO_DHCP
-#define NETBOOTD_PROTO_DHCP
+#ifndef NETBOOTD_PROTO_TFTP
+#define NETBOOTD_PROTO_TFTP
 #include "TFTP_Defines.h"
 
 namespace Netbootd
@@ -13,45 +13,41 @@ namespace Netbootd
 	{
 		EXPORT typedef struct TFTP_Packet
 		{
-			unsigned short opcode = 0;
-			unsigned short block = 0;
+
 			char* payload = nullptr;
 
 			EXPORT TFTP_Packet() {}
-			EXPORT ~TFTP_Packet() {}
-
-			EXPORT TFTP_Packet(const TFTP_OPCODE opcode, const unsigned short block)
+			EXPORT ~TFTP_Packet()
 			{
-				this->opcode = BS16(opcode);
-				this->block = BS16(block);
 			}
 
-			EXPORT void set_opcode(const TFTP_OPCODE opcode)
+			EXPORT TFTP_Packet(const TFTP_OPCODE opcode,
+				const _SIZE_T length, const unsigned short block)
 			{
-				this->opcode = BS16(opcode);
+				payload = new char[length];
+				ClearBuffer(payload, length);
+				auto op =  static_cast<unsigned short>(opcode);
+				auto bl = static_cast<unsigned short>(block);
+
+				memcpy(&payload[0], &op, sizeof(unsigned short));
+				memcpy(&payload[2], &bl, sizeof(unsigned short));
 			}
 
-			EXPORT TFTP_OPCODE get_opcode() const
+			EXPORT TFTP_Packet(const TFTP_OPCODE opcode, const _SIZE_T length)
 			{
-				return static_cast<TFTP_OPCODE>(BS16(this->opcode));
+				payload = new char[length];
+				ClearBuffer(payload, length);
+				auto op = BS16(static_cast<unsigned short>(opcode));
+				
+				memcpy(&payload[0], &op, sizeof(unsigned short));
 			}
 
-			EXPORT void set_block(const unsigned short block)
+			EXPORT _SIZE_T Write(const void* data, const _SIZE_T length, const _SIZE_T offset) const
 			{
-				this->block = BS16(block);
+				memcpy(&payload[offset], data, length);
+				return length;
 			}
-
-			EXPORT unsigned short get_block() const
-			{
-				return static_cast<unsigned short>(BS16(this->block));
-			}
-
-			EXPORT void set_payload(const char* data, const _SIZE_T length)
-			{
-				ClearBuffer(this->payload, length);
-				memcpy(&this->payload, data, length);
-			}
-		};
+		} TFTP_Packet;
 	}
 }
 #endif

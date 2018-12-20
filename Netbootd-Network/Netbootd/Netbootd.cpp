@@ -15,15 +15,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "../Include.h"
 #include "Network/Server/Server.h"
 #include "Network/Protocol/DHCP.h"
+#include "Network/Protocol/TFTP.h"
 #include "NetBootd.h"
 #include "../../Netbootd-System/System/Filesystem.h"
+#include <sstream>
 
 EXPORT Netbootd::Network::Server server;
 EXPORT Netbootd::System::Filesystem fs;
 EXPORT void Handle_Request(const std::string& ident, const ServerMode serverMode,
-	const ServiceType serviceType, const char*, Netbootd::Network::client _client);
+	const ServiceType serviceType, const char*, _SIZE_T, Netbootd::Network::client _client);
+
 EXPORT Netbootd::Network::client createIdent(const char* buffer, ServiceType serviceType,
 	Netbootd::Network::client& client);
+
+EXPORT void Handle_TFTP_RRQ_Request(const std::string& ident, Netbootd::Network::client* client,
+	const char* buffer, const _SIZE_T length);
 
 EXPORT void Select_Bootfile(Netbootd::Network::client* c);
 
@@ -142,7 +148,7 @@ EXPORT void Handle_DHCP_Discover(const std::string& ident, Netbootd::Network::cl
 			}
 		}
 
-		
+
 		break;
 	default:;
 	}
@@ -177,10 +183,12 @@ EXPORT void Handle_DHCP_Request(const std::string& ident,
 				memcpy(&item[0], &bootitem, 2);
 				memcpy(&item[2], &layer, 2);
 				vendorops.emplace_back(71, 4, item);
-
-				c->Protocol.dhcp.set_nextIP(server.LocalIP());
-				c->Protocol.dhcp.set_servername(server.GetHostName());
-				Select_Bootfile(c);
+				if (BS16(bootitem) == BS16(static_cast<unsigned short>(1)))
+				{
+					c->Protocol.dhcp.set_nextIP(server.LocalIP());
+					c->Protocol.dhcp.set_servername(server.GetHostName());
+					Select_Bootfile(c);
+				}
 			}
 		}
 		else
@@ -236,12 +244,13 @@ EXPORT void Select_Bootfile(Netbootd::Network::client* c)
 }
 
 EXPORT void Handle_Request(const std::string& ident, const ServerMode serverMode,
-	const ServiceType serviceType, const char* buffer, Netbootd::Network::client _client)
+	const ServiceType serviceType, const char* buffer, _SIZE_T length, Netbootd::Network::client _client)
 {
 	char data[16385];
-	auto pktsize = 0;
-	ClearBuffer(data, sizeof 16385);
-	Netbootd::Network::DHCP_Packet response;
+	auto pktsize = static_cast<_SIZE_T>(0);
+	ClearBuffer(data, 16385);
+	Netbootd::Network::DHCP_Packet dhcp_response;
+	Netbootd::Network::TFTP_Packet TFTP_response;
 	Netbootd::Network::client c;
 
 	switch (serverMode)
@@ -297,11 +306,11 @@ EXPORT void Handle_Request(const std::string& ident, const ServerMode serverMode
 					c.Protocol.dhcp.options.at(53).Value[0]))
 				{
 				case Netbootd::Network::DISCOVER:
-					Handle_DHCP_Discover(ident, &c, &response);
+					Handle_DHCP_Discover(ident, &c, &dhcp_response);
 					break;
 				case Netbootd::Network::REQUEST:
 				case Netbootd::Network::INFORM:
-					Handle_DHCP_Request(ident, &c, &response);
+					Handle_DHCP_Request(ident, &c, &dhcp_response);
 					break;
 				case Netbootd::Network::RELEASE:
 					server.RemoveClient(c.ident);
@@ -314,12 +323,12 @@ EXPORT void Handle_Request(const std::string& ident, const ServerMode serverMode
 					<unsigned char>(255)));
 			}
 
-			response = Netbootd::Network::DHCP_Packet(c);
-			pktsize = sizeof(response);
+			dhcp_response = Netbootd::Network::DHCP_Packet(c);
+			pktsize = sizeof(dhcp_response);
 
-			memcpy(&data, &response, pktsize);
+			memcpy(&data, &dhcp_response, pktsize);
 			pktsize = StripPacket(data, pktsize);
-			
+
 			server.Send(ident, c, data, pktsize);
 			server.RemoveClient(c.ident);
 			break;
@@ -328,6 +337,21 @@ EXPORT void Handle_Request(const std::string& ident, const ServerMode serverMode
 			c = server.GetClient(_client.ident);
 
 			printf("Got TFTP request from: %s\n", c.ident.c_str());
+			switch (c.Protocol.tftp.get_opcode())
+			{
+			case Netbootd::Network::TFTP_Read:
+				Handle_TFTP_RRQ_Request(ident, &c, buffer, length);
+				break;
+			case Netbootd::Network::TFTP_Write: break;
+			case Netbootd::Network::TFTP_Data: break;
+			case Netbootd::Network::TFTP_Ack: break;
+			case Netbootd::Network::TFTP_Error: break;
+			case Netbootd::Network::TFTP_OACK: break;
+			default:;
+			}
+			
+			if (c.Protocol.tftp.get_state() == Netbootd::Network::TFTP_DONE)
+				server.RemoveClient(c.ident);
 			break;
 		default:;
 		}
@@ -347,8 +371,14 @@ EXPORT void GenerateMulticastOption(const std::string& ident, Netbootd::Network:
 	vendorOpts->emplace_back(static_cast<unsigned char>(1),
 		static_cast<unsigned int>(client->Protocol.dhcp.rbcp.mcastIP));
 
-	vendorOpts->emplace_back(static_cast<unsigned char>(2),
+	vendorOpts->emplace_back(static_cast<unsigned char>(3),
 		static_cast<unsigned short>(client->Protocol.dhcp.rbcp.mcast_port));
+
+	vendorOpts->emplace_back(static_cast<unsigned char>(4),
+		static_cast<unsigned char>(client->Protocol.dhcp.rbcp.delay));
+
+	vendorOpts->emplace_back(static_cast<unsigned char>(5),
+		static_cast<unsigned char>(client->Protocol.dhcp.rbcp.timeout));
 }
 
 EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
@@ -357,14 +387,34 @@ EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
 	std::vector<Netbootd::Network::BootMenuEntry> BootMenu;
 	std::vector<Netbootd::Network::BootServerEntry> bootserver;
 
-	BootMenu.emplace_back(static_cast<unsigned short>(BootMenu.size()),
+	BootMenu.emplace_back(static_cast<unsigned short>(0),
 		"Local Boot");
 
-	BootMenu.emplace_back(static_cast<unsigned short>(BootMenu.size()),
+	// Add this server to the list.
+	BootMenu.emplace_back(static_cast<unsigned short>(1),
 		server.GetHostName(), server.LocalIP());
 
-	BootMenu.emplace_back(static_cast<unsigned short>(BootMenu.size()),
-		"FBS01.FBLIPKE.DE", inet_addr("10.20.0.1"));
+	auto fs = Netbootd::System::Filesystem::ResolvePath("serverlist.txt", true);
+	auto* fil = fopen(fs.c_str(), "r");
+
+	if (fil != nullptr)
+	{
+		char line[1024];
+		ClearBuffer(line, sizeof line);
+		while (fgets(line, sizeof line, fil) != nullptr)
+		{
+			char desc[64];
+			ClearBuffer(desc, 64);
+			char addr[64];
+			ClearBuffer(addr, 64);
+
+			if (sscanf(line, "%s | %s", &addr, &desc) != 0)
+				BootMenu.emplace_back(static_cast<unsigned short>(BootMenu.size()),
+					std::string(desc), inet_addr(addr));
+		}
+
+		fclose(fil);
+	}
 
 	_SIZE_T offset = 0;
 	unsigned short id = 0;
@@ -410,22 +460,25 @@ EXPORT void GenerateBootMenue(const Netbootd::Network::client* client,
 	vendorOpts->emplace_back(8, offset, serverbuffer);
 
 	/* Menue prompt */
-	char promptbuffer[512];
-	ClearBuffer(menubuffer, sizeof promptbuffer);
+	const std::string prompt = SETTINGS.PXEPROMP;
+
+	char* promptbuffer = new char[prompt.size() + 1];
+	ClearBuffer(menubuffer, prompt.size());
 	offset = 0;
 
-	auto timeout = 0x0a;
+	auto timeout = SETTINGS.PXEPROMPTTIMEOUT;
 
 	memcpy(&promptbuffer[offset], &timeout, sizeof(unsigned char));
-	offset += 1;
-	const std::string prompt = "Press [F8] to select a Server...";
-
+	offset += sizeof(unsigned char);
+	
 	memcpy(&promptbuffer[offset], prompt.c_str(),
 		static_cast<_SIZE_T>(prompt.size()));
 
 	offset += static_cast<_SIZE_T>(prompt.size());
 
 	vendorOpts->emplace_back(10, offset, promptbuffer);
+
+	delete[] promptbuffer;
 }
 
 EXPORT void NetBootd::Listen()
@@ -445,4 +498,60 @@ EXPORT NetBootd::~NetBootd()
 #ifdef _WIN32
 	Netbootd::Network::Server::close_winsock();
 #endif
+}
+
+EXPORT void Handle_TFTP_RRQ_Request(const std::string& ident, Netbootd::Network::client* client,
+	const char* buffer, const _SIZE_T length)
+{
+	char oackbuffer[128];
+	ClearBuffer(oackbuffer, sizeof oackbuffer);
+	client->fs = new Netbootd::System::Filesystem(client->Protocol.tftp.filename,
+		Netbootd::System::Filesystem::FileReadBinary);
+	std::stringstream* ss = new std::stringstream();
+
+	if (!client->fs->Exist())
+	{
+		client->Protocol.tftp.set_state(Netbootd::Network::TFTP_ERROR);
+		return;
+	}
+
+	client->Protocol.tftp.set_state(Netbootd::Network::TFTP_INIT);
+
+	_SIZE_T pos = 0;
+
+	client->Protocol.tftp.set_block(0);
+	client->Protocol.tftp.set_bytesRead(0);
+
+	if (client->Protocol.tftp.TFTP_HasOption(buffer, length, "octet", pos))
+	{
+		client->Protocol.tftp.set_bytesToRead(client->fs->Length());
+
+		auto offset = static_cast<_SIZE_T>(2);
+		oackbuffer[0] = 0x00;
+		oackbuffer[1] = 0x06;
+
+		memcpy(&oackbuffer[offset], "blksize", sizeof("blksize"));
+		offset += sizeof("blksize");
+		
+		auto blksize = client->Protocol.tftp.get_blocksize();
+		*ss << blksize;
+
+		memcpy(&oackbuffer[offset], ss->str().c_str(), ss->str().size());
+		offset += ss->str().size() + 1;
+
+		memcpy(&oackbuffer[offset], "tsize", sizeof("tsize"));
+		offset += sizeof("tsize");
+
+		delete ss;
+
+		ss = new std::stringstream();
+		*ss << client->Protocol.tftp.get_bytesToRead();
+		memcpy(&oackbuffer[offset], ss->str().c_str(), ss->str().size());
+		offset += ss->str().size() + 1;
+
+		server.Send(ident, *client, oackbuffer, offset);
+		delete ss;
+	}
+	else
+		client->Protocol.tftp.set_state(Netbootd::Network::TFTP_ERROR);
 }

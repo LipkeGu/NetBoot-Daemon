@@ -28,7 +28,7 @@ namespace Netbootd
 			EXPORT _SIZE_T Read(char* dest, const _SIZE_T offset,
 				const long seek, const _SIZE_T length) const;
 			static
-			EXPORT std::string ResolvePath(const std::string& path);
+			EXPORT std::string ResolvePath(const std::string& path, const bool external = false);
 			static
 			EXPORT bool CreateDir(const std::string& path);
 			static

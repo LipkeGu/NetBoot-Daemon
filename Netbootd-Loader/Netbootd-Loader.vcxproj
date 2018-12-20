@@ -152,6 +152,12 @@
       <Project>{3d9fbdbd-ce14-40d7-a3df-d8e971f22d83}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="serverlist.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="tftp_root\Boot\x86\wdsnbp.com" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

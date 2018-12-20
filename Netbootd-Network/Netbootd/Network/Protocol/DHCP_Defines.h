@@ -134,5 +134,17 @@ namespace Netbootd
 		{
 			Ethernet = 0x01
 		} DHCPHARDWARETYPE;
+
+		EXPORT typedef enum CLIENTSTATE
+		{
+			DHCP_INIT = 0,
+			DHCP_WAITING = 1,
+			DHCP_DONE = 2,
+
+			TFTP_INIT = 3,
+			TFTP_DOWNLOAD = 4,
+			TFTP_ERROR = 5,
+			TFTP_DONE = 6
+		} CLIENTSTATE;
 	}
 }

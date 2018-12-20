@@ -201,22 +201,21 @@ namespace Netbootd
 
 		EXPORT void __Send(const ServerMode serverMode, const ServiceType serviceType,
 			const _SOCKET __socket, client client, const char* buffer,
-			int length)
+			_SIZE_T length)
 		{
 			auto retval = SOCKET_ERROR;
-			unsigned int bs = 0;
+			_SIZE_T bs = 0;
 			switch (serverMode)
 			{
 			case TCP:
 				do
 				{
-					bs += _write(__socket, &buffer[bs], length
-						- static_cast<unsigned int>(bs), 0);
+					bs += _write(__socket, &buffer[bs], static_cast<int>(length), 0);
 				} while (bs < length);
 				break;
 			case UDPMCAST:
 			case UDP:
-				retval = sendto(__socket, buffer, length, 0,
+				retval = sendto(__socket, buffer, static_cast<int>(length), 0,
 					reinterpret_cast<struct sockaddr*>
 					(&client.toAddr), sizeof client.toAddr);
 
@@ -264,7 +263,7 @@ namespace Netbootd
 
 		EXPORT void __Listen(const ServerMode serverMode, const ServiceType serviceType,
 			const std::string& ident, const _SOCKET _socket, const int flags,
-			const int backlog, void(*ListenCallBack)(const std::string&, const ServerMode, const ServiceType, const char*, client))
+			const int backlog, void(*ListenCallBack)(const std::string&, const ServerMode, const ServiceType, const char*, _SIZE_T, client))
 		{
 			char buffer[16385];
 			ClearBuffer(&buffer, sizeof buffer);
@@ -323,11 +322,12 @@ namespace Netbootd
 					printf("[E] %s: Receive failed! (%d)\n", __FUNCTION__, WSAGetLastError());
 					return;
 				}
+			default: ;
 			}
 
 			if (ListenCallBack != nullptr)
 				ListenCallBack(ident, serverMode, serviceType,
-					buffer, client(serviceType, "", remote, buffer, retval));
+					buffer, retval, client(serviceType, "", remote, buffer, retval));
 		}
 
 		EXPORT int Endpoint::GetLogs() const

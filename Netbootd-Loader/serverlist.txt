@@ -1,0 +1,5 @@
+10.20.0.1 | FBS01.FBLipke.de
+10.21.0.1 | FB7360.FBLipke.de
+10.30.0.1 | FB7360.FBLipke.de
+10.40.0.1 | FB7360.FBLipke.de
+10.25.0.1 | WNDR3700.FBLipke.de

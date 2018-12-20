@@ -7,12 +7,12 @@ namespace Netbootd
 		EXPORT Filesystem::Filesystem(std::string filename, FileOpenMode mode)
 		{
 			this->workingDir = GetCurDir();
+			this->file = nullptr;
 			this->mode = mode;
 			this->filesize = 0;
 			this->filename = ResolvePath(filename);
 			this->isOpen = this->Open();
-			this->ctype = nullptr;
-			this->file = nullptr;
+			this->ctype = "";
 
 			if (this->isOpen)
 			{
@@ -35,16 +35,16 @@ namespace Netbootd
 			switch (this->mode)
 			{
 			case FileWrite:
-				this->file = fopen(this->filename.c_str(), "we");
+				this->file = fopen(this->filename.c_str(), "w");
 				break;
 			case FileRead:
-				this->file = fopen(this->filename.c_str(), "re");
+				this->file = fopen(this->filename.c_str(), "r");
 				break;
 			case FileReadBinary:
-				this->file = fopen(this->filename.c_str(), "rbe");
+				this->file = fopen(this->filename.c_str(), "rb");
 				break;
 			case FileWriteBinary:
-				this->file = fopen(this->filename.c_str(), "wbe");
+				this->file = fopen(this->filename.c_str(), "wb");
 				break;
 			default:
 				break;
@@ -172,13 +172,13 @@ namespace Netbootd
 			return this->filename;
 		}
 
-		EXPORT std::string Filesystem::ResolvePath(const std::string& path)
+		EXPORT std::string Filesystem::ResolvePath(const std::string& path, const bool external)
 		{
 			std::string res;
 
 			if (path.find_first_of('\\') == 0 || path.find_first_of('/') == 0)
 			{
-				res = GetCurDir() + "/" + path.substr(1, path.length() - 1);
+				res = GetCurDir() + (external ? "/" : "/tftp_root/") + path.substr(1, path.length() - 1);
 #ifdef _WIN32
 				res = replace(res, "/", "\\");
 #else
@@ -187,7 +187,7 @@ namespace Netbootd
 			}
 			else
 			{
-				res = GetCurDir() + "/" + path;
+				res = GetCurDir() + (external ? "/" : "/tftp_root/") + path;
 #ifdef _WIN32
 				res = replace(res, "//", "/");
 				res = replace(res, "/", "\\");

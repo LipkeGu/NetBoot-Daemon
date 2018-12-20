@@ -12,6 +12,6 @@ namespace Netbootd
 			TFTP_Ack = 0x0004,
 			TFTP_Error = 0x0005,
 			TFTP_OACK = 0x0006
-		};
+		} TFTP_OPCODE;
 	}
 }

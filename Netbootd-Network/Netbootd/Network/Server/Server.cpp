@@ -110,8 +110,7 @@ namespace Netbootd
 			return this->multicast;
 		}
 
-		EXPORT bool Server::Init(const bool multicast,
-			const long sec, const long usec)
+		EXPORT bool Server::Init(const bool multicast, const long sec, const long usec)
 		{
 			auto retval = 0;
 			this->multicast = multicast;
@@ -166,7 +165,7 @@ namespace Netbootd
 		}
 
 		EXPORT void Server::Listen(void(*ListenCallBack)
-			(const std::string&, const ServerMode, const ServiceType, const char*, client))
+			(const std::string&, const ServerMode, const ServiceType, const char*, _SIZE_T, client))
 		{
 			while (this->IsListening())
 			{
@@ -276,7 +275,7 @@ namespace Netbootd
 		}
 
 		EXPORT int Server::Send(const std::string& ident,
-			client& client, const char* buffer, int length)
+			client& client, const char* buffer, _SIZE_T length)
 		{
 			const auto retval = SOCKET_ERROR;
 

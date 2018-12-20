@@ -14,6 +14,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #pragma once
 #include "../../../Include.h"
 #include "../Protocol/DHCP_Defines.h"
+#include "../../../../Netbootd-System/System/Filesystem.h"
+#include "../Protocol/TFTP.h"
 
 #ifndef NETBOOTD_CLIENT
 #define NETBOOTD_CLIENT
@@ -33,18 +35,32 @@ namespace Netbootd
 			std::string ident;
 			sockaddr_in toAddr;
 			ServiceType serviceType;
+			System::Filesystem* fs = nullptr;
 
 			struct
 			{
 				struct
 				{
+					CLIENTSTATE state = DHCP_INIT;
+
 					std::map<unsigned char, DHCP_Option> options;
+
 					EXPORT void AddOption(const DHCP_Option option)
 					{
 						RemoveOption(option.Option);
 
 						options.insert(std::pair<unsigned char,
 							DHCP_Option>(option.Option, option));
+					}
+
+					EXPORT CLIENTSTATE get_state() const
+					{
+						return this->state;
+					}
+
+					EXPORT void set_state(const CLIENTSTATE state)
+					{
+						this->state = state;
 					}
 
 					EXPORT void RemoveOption(const unsigned char opt)
@@ -259,7 +275,9 @@ namespace Netbootd
 						
 						unsigned int mcastIP = inet_addr(SETTINGS.MTFTP_ADDR.c_str());
 						unsigned short mcast_port = SETTINGS.MTFTP_PORT;
-
+						unsigned char delay = SETTINGS.PXE_MTFTP_DELAY;
+						unsigned char timeout = SETTINGS.PXE_MTFTP_TIMEOUT;
+						
 						bool allowBootMenue = SETTINGS.PXEBOOTMENUE == 1;
 
 						EXPORT unsigned short get_layer() const
@@ -270,6 +288,26 @@ namespace Netbootd
 						EXPORT void set_layer(const unsigned short type)
 						{
 							this->layer = BS16(type);
+						}
+
+						EXPORT unsigned char get_delay() const
+						{
+							return this->delay;
+						}
+
+						EXPORT void set_delay(const unsigned char delay)
+						{
+							this->delay = delay;
+						}
+
+						EXPORT unsigned char get_timeout() const
+						{
+							return this->timeout;
+						}
+
+						EXPORT void set_timeout(const unsigned char timeout)
+						{
+							this->timeout = timeout;
 						}
 
 						EXPORT unsigned short get_item() const
@@ -302,13 +340,40 @@ namespace Netbootd
 				struct
 				{
 					std::string filename;
-					unsigned int bytesRead;
-					unsigned int bytesToRead;
+					unsigned int bytesRead = 0;
+					unsigned int bytesToRead = 0;
 
-					unsigned short block;
-					unsigned short blocksize;
-					unsigned short windowsSize;
-					unsigned short lastAckedBlock;
+					unsigned short opcode;
+					unsigned short block = 0;
+					unsigned short blocksize = 1024;
+					unsigned short windowsSize = 1;
+					unsigned short lastAckedBlock = 0;
+
+					std::map<std::string, std::string> options;
+
+					CLIENTSTATE state = TFTP_INIT;
+					EXPORT CLIENTSTATE get_state() const
+					{
+						return this->state;
+					}
+
+					EXPORT TFTP_OPCODE get_opcode() const
+					{
+						return static_cast<TFTP_OPCODE>(this->opcode);
+					}
+
+					EXPORT void set_opcode(const char* opcode)
+					{
+						unsigned short op;
+						
+						memcpy(&op, opcode, sizeof(unsigned short));
+						this->opcode = BS16(op);
+					}
+
+					EXPORT void set_state(const CLIENTSTATE state)
+					{
+						this->state = state;
+					}
 
 					EXPORT unsigned int get_bytesRead() const
 					{
@@ -322,7 +387,7 @@ namespace Netbootd
 
 					EXPORT void set_block(const unsigned short block)
 					{
-						this->block = block;
+						this->block = BS16(block);
 					}
 
 					EXPORT unsigned short get_blocksize() const
@@ -342,7 +407,7 @@ namespace Netbootd
 
 					EXPORT void set_windowsize(const unsigned short windowsize)
 					{
-						this->windowsSize = windowsize;
+						this->windowsSize = BS16(windowsize);
 					}
 
 					EXPORT void set_bytesRead(const unsigned int bytes)
@@ -360,15 +425,19 @@ namespace Netbootd
 						this->bytesToRead = bytes;
 					}
 
-					EXPORT bool TFTP_HasOption(const char* option, const char* buffer, int length)
+					EXPORT bool TFTP_HasOption(const char* buffer, const _SIZE_T length,
+						const char* option, _SIZE_T& position)
 					{
-						for (auto i = 2; i < length; i++)
+						for (_SIZE_T i = 2; i < length; i++)
 							if (memcmp(option, &buffer[i], strlen(option)) == 0)
+							{
+								position = i + (strlen(option) + 1);
 								return true;
+							}
 
+						position = 0;
 						return false;
 					}
-
 				} tftp;
 			} Protocol;
 		};
